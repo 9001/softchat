@@ -2,7 +2,7 @@
 
 about = {
     "name": "softchat",
-    "version": "0.4",
+    "version": "0.5",
     "date": "2020-10-14",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
@@ -26,10 +26,10 @@ from PIL import ImageFont, ImageDraw, Image
 """
 ==[ DEPENDENCIES ]=====================================================
 each version below is the latest as of writing,
-tested on cpython 3.8.1 and pypy36
+tested on cpython 3.8.1
 
  - chat rips made using the modified chat_replay_downloader.py
-     mod: https://ocv.me/dev/?chat_replay_downloader.py
+     mod: https://ocv.me/dev/?chat_replay_downloader-3.py
      orig: https://github.com/xenova/chat-replay-downloader/
 
  - all the noto fonts in a subfolder called noto-hinted
@@ -53,7 +53,7 @@ tested on cpython 3.8.1 and pypy36
 
 ==[ NEW ]==============================================================
 
- - proper collision detection in mode2
+ - hilight messages from mods
 
 ==[ TODO ]=============================================================
 
@@ -332,10 +332,14 @@ def main():
         if 'amount' in msg:
             o['shrimp'] = msg['amount']
             o['color'] = msg['body_color']['hex'][1:][:-2]  # "#1de9b6ff"
+
+        if 'badges' in msg:
+            o['badges'] = msg['badges']
         
         msgs.append(o)
 
-        #if n_msg > 15000:
+        # 40000 01:54:37 SilkTouch is an enchant for picaxe
+        #if n_msg > 40000:
         #    break
     
     if ar.f:
@@ -454,9 +458,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         f.write("Dialogue: 0,{},{},a,,0,0,0,,{}\n".format(
                             ta, tb, txt).encode('utf-8'))
             else:
-                txt, t0, w, h = [msg[x] for x in ["txt", "t0", "sx", "sy"]]
-                txt = '\\N'.join(txt)
+                txts, t0, w, h = [msg[x] for x in ["txt", "t0", "sx", "sy"]]
+                txt = '\\N'.join(txts)
+
+                #if txt.startswith('SilkTouch is an enchant for picaxe'):
+                #    print('a')
+                
+                # pillow height calculation is off by a bit; this is roughly it i think
                 h = int(h + fofs * 0.5)
+
+                # ass linespacing is huge, compensate (wild guess btw)
+                h += ar.sz * 0.25 * (len(txts) - 1)
                 
                 shrimp_mul = 1
                 if shrimp:
@@ -464,7 +476,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     shrimp_mul = 2
                     w += h * 4  # donation is not included, TODO maybe
 
-                len_boost = 0.3
+                if 'badges' in msg and 'Moderator' in msg['badges']:
+                    # mods and other VIPs
+                    txt = rf"{{\bord24\shad6}}*{{\bord6}}{txt}"
+
+                len_boost = 0.5
                 td = (vw + w - w * len_boost) * shrimp_mul / ar.spd
                 t1 = t0 + td
 
