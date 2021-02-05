@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.15",
-    "date": "2020-11-23",
+    "version": "0.16",
+    "date": "2020-12-13",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -102,8 +102,8 @@ tested on cpython 3.8.1
 
 ==[ NEW ]==============================================================
 
- - hilight messages from users in vips[]
- - fix media duration check
+ - workaround youtube occasionally setting unix timestamps
+    in the relative-time field of the last message (nice)
 
 ==[ TODO ]=============================================================
 
@@ -396,7 +396,7 @@ def main():
     }
 
     vips = [
-        "some-youtube-userid"
+        "UCkIccKaHDGA8lYVmUerLhag"
     ]
 
     ap = argparse.ArgumentParser(
@@ -452,7 +452,13 @@ def main():
     else:
         info("calculating media duration")
         try:
-            chat_dur = jd[-1]["time_in_seconds"]
+            ofs = 0
+            while True:
+                ofs -= 1
+                chat_dur = jd[ofs]["time_in_seconds"]
+                if chat_dur < 4096 * 4096:
+                    break
+
             v_dur = get_ff_dur(media_fn)
             delta = abs(chat_dur - v_dur)
             perc = delta * 100.0 / max(v_dur, chat_dur)
@@ -528,7 +534,7 @@ def main():
             t_hms = msg["time_text"].split(".")[0]
             t_isec = int(t_fsec)
 
-        if t_hms.startswith("-") or t_isec < 0:
+        if t_hms.startswith("-") or t_isec < 0 or t_isec > 4096 * 4096:
             continue
 
         # time integrity check
@@ -743,7 +749,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if "badges" in msg and "Moderator" in msg["badges"]:
                     txt[-1] += rf" {{\bord16\shad6}}*"
                 elif msg["uid"] in vips:
-                    txt = rf"{{\bord16\shad4}}_{{\bord4}}{txt}"
+                    txt[-1] += rf" {{\bord16\shad4}}----"
 
                 if shrimp:
                     txt.append(shrimp)
