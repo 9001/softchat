@@ -1,0 +1,7 @@
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
