@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.3",
-    "date": "2020-10-13",
+    "version": "0.4",
+    "date": "2020-10-14",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -26,7 +26,7 @@ from PIL import ImageFont, ImageDraw, Image
 """
 ==[ DEPENDENCIES ]=====================================================
 each version below is the latest as of writing,
-tested on cpython 3.8.1
+tested on cpython 3.8.1 and pypy36
 
  - chat rips made using the modified chat_replay_downloader.py
      mod: https://ocv.me/dev/?chat_replay_downloader.py
@@ -50,6 +50,10 @@ tested on cpython 3.8.1
  - OPTIONAL (this also works with some modifications):
    python -m pip install --user mecab-python3
    # bring your own dictionaries
+
+==[ NEW ]==============================================================
+
+ - proper collision detection in mode2
 
 ==[ TODO ]=============================================================
 
@@ -129,10 +133,24 @@ class TextStuff(object):
         self.imd = ImageDraw.Draw(self.im)
         self.pipe_width = self.font.getsize('|')[0]
         self.font_ofs = self.font.getmetrics()[1]
+        self.cache = {}
+        self.vsize = self.caching_vsize
 
-    def vsize(self, txt):
-        w, h = self.imd.textsize('|' + txt.replace('\n', '\n|'), self.font)
+    def vsize_impl(self, text):
+        w, h = self.imd.textsize('|' + text.replace('\n', '\n|'), self.font)
         return w - self.pipe_width, h
+    
+    def caching_vsize(self, text):
+        if len(text) > 24:
+            return self.vsize_impl(text)
+        
+        # faster than try/catch and get(text,None)
+        if text in self.cache:
+            return self.cache[text]
+        
+        ret = self.vsize_impl(text)
+        self.cache[text] = ret
+        return ret
 
     def unrag(self, text, width):
         """
@@ -258,41 +276,50 @@ def main():
             txt = yomi.parse(txt)
 
         if ar.m == 1:
-            # wrap to specified width
-            # by splitting on ascii whitespace
-            vtxt = z.unrag(txt, bw)
+            wrap_width = bw
+        else:
+            # vsfilter wraps it anyways orz
+            wrap_width = vw / 2
+
+        #if n_msg % 100 == 0 and len(z.cache) > 1024 * 1024:
+        #    z.cache = {}
+        
+        # wrap to specified width
+        # by splitting on ascii whitespace
+        vtxt = z.unrag(txt, bw)
+        vsz = z.vsize('\n'.join(vtxt))
+        
+        if vsz[0] >= bw and is_jp:
+            # too wide, is japanese,
+            # try wrapping on japanese punctuation instead
+            vtxt = ptn_pre.sub("\\1\n", txt)
+            vtxt = ptn_post.sub("\n\\1", vtxt)
+            vtxt = vtxt.split('\n')
             vsz = z.vsize('\n'.join(vtxt))
-            
-            if vsz[0] >= bw and is_jp:
-                # too wide, is japanese,
-                # try wrapping on japanese punctuation instead
-                vtxt = ptn_pre.sub("\\1\n", txt)
-                vtxt = ptn_post.sub("\n\\1", vtxt)
-                vtxt = vtxt.split('\n')
+
+            if vsz[0] >= bw and HAVE_TOKENIZER:
+                # still too wide, wrap on word-boundaries
+                vtxt = z.unrag(wakati.parse(txt), bw)
+                vtxt = [x.replace(' ', '') for x in vtxt]
+
+                for n in range(1, len(vtxt)):
+                    # move most punctuation to the prev line
+                    ln = vtxt[n]
+                    m = ptn_pre.search(ln)
+                    if m and m.start() == 0:
+                        vtxt[n-1] += ln[:m.end()]
+                        vtxt[n] = ln[m.end():]
+
                 vsz = z.vsize('\n'.join(vtxt))
 
-                if vsz[0] >= bw and HAVE_TOKENIZER:
-                    # still too wide, wrap on word-boundaries
-                    vtxt = z.unrag(wakati.parse(txt), bw)
-                    vtxt = [x.replace(' ', '') for x in vtxt]
-
-                    for n in range(1, len(vtxt)):
-                        # move most punctuation to the prev line
-                        ln = vtxt[n]
-                        m = ptn_pre.search(ln)
-                        if m and m.start() == 0:
-                            vtxt[n-1] += ln[:m.end()]
-                            vtxt[n] = ln[m.end():]
-
-                    vsz = z.vsize('\n'.join(vtxt))
-        else:
-            # danmaku; no wrapping
-            vsz = z.vsize(txt.replace('\n', ' '))
-            vtxt = [txt]
-
         if n_msg % 100 == 0:
-            info('  {} / {}   {}   {}\n   {}\n'.format(
-                n_msg, len(jd), msg["time_text"], vsz, '\n   '.join(vtxt)))
+            info('  {} / {}   {}%   {}   {}\n   {}\n'.format(
+                n_msg,
+                len(jd),
+                int((n_msg*100)/len(jd)),
+                msg["time_text"],
+                vsz,
+                '\n   '.join(vtxt)))
 
         o = {
             "name": msg["author"],
@@ -308,8 +335,8 @@ def main():
         
         msgs.append(o)
 
-        if n_msg > 5000:
-            break
+        #if n_msg > 15000:
+        #    break
     
     if ar.f:
         opts = {
@@ -354,8 +381,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         # Dialogue: 0,0:00:00.00,0:00:05.00,a,,0,0,0,,hello world
 
+        n_msg = 0
         msg = None
-        yhist = []
         supers = []
         colormap = {}
         for next_msg in msgs + [None]:
@@ -363,6 +390,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 msg = next_msg
                 continue
 
+            n_msg += 1
+            if n_msg % 1000 == 1:
+                info(f"writing {hms(msg['t0'])}, #{n_msg} / {len(msgs)}")
+            
             name = msg["name"]
             c = colormap.get(name, None)
             if not c:
@@ -424,40 +455,120 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                             ta, tb, txt).encode('utf-8'))
             else:
                 txt, t0, w, h = [msg[x] for x in ["txt", "t0", "sx", "sy"]]
-                txt = ' '.join(txt)
+                txt = '\\N'.join(txt)
+                h = int(h + fofs * 0.5)
                 
-                len_boost = 0.3
-                td = (vw + w - w * len_boost) / ar.spd
-                
-                # find an y-pos that isn't too crowded;
-                # and try 16 random y-positions, and
-                # look through the <=128 last y-positions used
-                # summing up the distance between selected and past
-                # with decreasing importance (mul) as we move older
-                ys = []
-                for _ in range(32):
-                    y = int(random.randrange(int(vh - h)) - fofs)
-                    dist = 0
-                    mul = 1.1
-                    for oy in reversed(yhist[-8:]):
-                        dist += abs(y - oy) * mul
-                        mul /= 8.0
-
-                    ys.append([dist, y])
-                
-                yhist.append(sorted(ys)[-1][1])
-                if len(yhist) > 128:
-                    yhist = yhist[64:]
-                
+                shrimp_mul = 1
                 if shrimp:
-                    td *= 2
                     txt = f"{shrimp} {txt}"
-                    w += 256  # amount is not included, TODO maybe
+                    shrimp_mul = 2
+                    w += h * 4  # donation is not included, TODO maybe
 
-                txt = rf"{{\move({vw},{y},{-w},{y})\3c&H{c}&}}{txt}{{\fscx40\fscy40\bord1}}\N{name}"
+                len_boost = 0.3
+                td = (vw + w - w * len_boost) * shrimp_mul / ar.spd
+                t1 = t0 + td
+
+                # collision detection polls at 50% and 80% from the left,
+                # figure out timestamps when the right-side hits those
+                abs_spd = (vw + w * 2.0) / td
+                p8 = t0 + (w + vw * 0.2) / abs_spd
+                p5 = t0 + (w + vw * 0.5) / abs_spd
+
+                # and when the left-side hits those,
+                # to compare against other p8/p5's and find a free slot
+                a8 = t0 + (vw * 0.2) / abs_spd
+                a5 = t0 + (vw * 0.5) / abs_spd
+
+                rm = []
+                taken8 = []
+                taken5 = []
+                for m in vis:
+                    m_py, m_sy, m_p8, m_p5 = [m[x] for x in ["py", "sy", "p8", "p5"]]
+
+                    if t0 > m_p5:
+                        rm.append(m)
+                        continue
+
+                    if a8 < m_p8:
+                        taken8.append([m_py, m_py + m_sy, m_p8, m])
+
+                    if a5 < m_p5:
+                        taken5.append([m_py, m_py + m_sy, m_p5, m])
+
+                for m in rm:
+                    vis.remove(m)
+
+                ymax = vh - h
+                frees = [[ymax, 0, ymax]]  # size, y0, y1
+                for y1, y2, _, _ in sorted(taken8):
+                    rm = []
+                    add = []
+                    for free in frees:
+                        _, fy1, fy2 = free
+
+                        if fy1 >= y2 or y1 >= fy2:
+                            # does not intersect
+                            continue
+
+                        elif fy1 <= y1 and fy2 >= y2:
+                            # sub slices range in half, split it
+                            rm.append(free)
+                            
+                            nfsz = y1 - fy1
+                            if nfsz > h / 3.0:
+                                # h/3 to ensure less than 67% overlap
+                                add.append([nfsz, fy1, y1])
+
+                            nfsz = fy2 - y2
+                            if nfsz > h / 3.0:
+                                add.append([nfsz, y2, fy2])
+
+                        elif y2 >= fy1:
+                            # sub slices top of free
+                            rm.append(free)
+                            
+                            nfsz = fy2 - y2
+                            if nfsz > h / 3.0:
+                                add.append([nfsz, y2, fy2])
+
+                        elif y1 <= fy2:
+                            # slices bottom
+                            rm.append(free)
+
+                            nfsz = y1 - fy1
+                            if nfsz > h / 3.0:
+                                add.append([nfsz, fy1, y1])
+
+                        else:
+                            raise Exception("fug")
+                
+                    for x in rm:
+                        frees.remove(x)
+                    
+                    frees.extend(add)
+
+                if not frees:
+                    # can't be helped, pick a random y to collide in
+                    y = int(random.randrange(ymax))
+                    best = [2, y-1, y+1]
+                else:
+                    avail, y0, y1 = sorted(frees)[-1]
+                    if avail <= h:
+                        y = int(y0 + avail / 2)
+                    else:
+                        # just centering looks boring, let's rand
+                        y = y0 + random.randrange(avail - h)
+
+                msg["t1"] = t1
+                msg["p8"] = p8
+                msg["p5"] = p5
+                msg["px"] = vw
+                msg["py"] = y
+                msg["txt"] = rf"{{\move({vw},{y},{-w},{y})\3c&H{c}&}}{txt}{{\fscx40\fscy40\bord1}}\N{name}"
+                vis.append(msg)
 
                 ln = "Dialogue: 0,{},{},a,,0,0,0,,{}\n".format(
-                    hms(t0), hms(t0 + td), txt).encode('utf-8')
+                    hms(t0), hms(msg["t1"]), msg["txt"]).encode('utf-8')
 
                 if shrimp:
                     supers.append(ln)
@@ -469,7 +580,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         for ln in supers:
             f.write(ln)
 
-    from pprint import pprint; pprint(msgs[-5:])
+    #from pprint import pprint; pprint(msgs[-5:])
     t1_main = time.time()
     info(f'finished in {t1_main-t0_main:.2f} sec')
 
@@ -496,16 +607,33 @@ c:\users\ed\bin\mpv.com "..\yt\ars-37-minecraft-3.json.mkv" -ss 1:15:20
 chat_replay_downloader.py https://www.youtube.com/watch?v=0Qygvs0rG50 -output ame-minecraft-railway-research.json
 chat_replay_downloader.py ame-minecraft-railway-research.json.json -output ame-minecraft-railway-research-2.json
 
-..\dev\softchat.py -m 2 "ame-minecraft-railway-research-2.json" && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --vf=fps=90 --sub-delay=-3 -ss 30:20
+..\dev\softchat.py -m 2 "ame-minecraft-railway-research-2.json" && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --vf=fps=90 --sub-delay=-3 -ss 2
 C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --interpolation=yes --blend-subtitles=yes --video-sync=display-resample --tscale=mitchell --hwdec=off --vo=direct3d
-C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --vf=fps=90 --interpolation=no --blend-subtitles=no --sub-delay=-3
+C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --vf=fps=90 --interpolation=no --blend-subtitles=no --sub-delay=-3 -ss 1:50:0
 
 ..\dev\softchat.py -m 1 -b 320x600+960+32 ame-minecraft-railway-research-2-2.json && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --sub-files=ame-minecraft-railway-research-2-2.json.ass --sub-delay=-3 -ss 120
 
 -----------------------------------------------------------------------
 
-pypy: 7.68 sec
-cpy3: 5.88 sec
+cpy3: 15.46 sec @15k NOcache
+cpy3:  8.87 sec @15k 16k 24
+
+pypy: 18.75 sec @15k NOcache
+pypy: 15.32 sec @15k 128 32
+pypy: 13.32 sec @15k  1k 32
+pypy: 12.59 sec @15k  4k 64
+pypy: 12.23 sec @15k  4k 16
+pypy: 12.09 sec @15k  4k 32
+pypy: 12.10 sec @15k  8k 24
+pypy: 11.42 sec @15k 16k 64
+pypy: 11.39 sec @15k 16k 16
+pypy: 11.26 sec @15k 16k 32
+pypy: 11.23 sec @15k 16k 24
+
+cpy3 full: 46.45 unb 24
+cpy3 full: 48.56 32k 24
+pypy full: 54.92 unb 24
+pypy full: 57.34 32k 24
 
 grep -E '"(amount|hex|message|time_text)":|^    \},' ame-minecraft-railway-research-2.json | grep -E '"amount":' -C5 | less
 
