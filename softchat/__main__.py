@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.14",
-    "date": "2020-11-17",
+    "version": "0.15",
+    "date": "2020-11-23",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -102,9 +102,8 @@ tested on cpython 3.8.1
 
 ==[ NEW ]==============================================================
 
- - change extension from ".json.ass" to ".ass"
- - increase speed boost of longer messages
- - try even harder to avoid collisions
+ - hilight messages from users in vips[]
+ - fix media duration check
 
 ==[ TODO ]=============================================================
 
@@ -396,6 +395,10 @@ def main():
         ":_yyy:": "🅈",
     }
 
+    vips = [
+        "some-youtube-userid"
+    ]
+
     ap = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description="convert modified chat_replay_downloader.py json into box-confined or danmaku-style softsubs",
@@ -437,7 +440,7 @@ def main():
 
     media_fn = None
     for ext in ["webm", "mp4", "mkv"]:
-        f = ar.fn.rsplit(".", 2)[0] + "." + ext
+        f = ar.fn.rsplit(".", 1)[0] + "." + ext
         if os.path.exists(f):
             media_fn = f
             break
@@ -627,7 +630,14 @@ def main():
         if nick in nick_dupes:
             nick += f"  ({msg['author_id']})"
 
-        o = {"nick": nick, "t0": t_fsec, "sx": sx, "sy": sy, "txt": vtxt}
+        o = {
+            "nick": nick,
+            "uid": msg["author_id"],
+            "t0": t_fsec,
+            "sx": sx,
+            "sy": sy,
+            "txt": vtxt
+        }
 
         if "amount" in msg:
             o["shrimp"] = msg["amount"]
@@ -731,8 +741,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 txt = [rf"{{\3c&H{c}&}}{nick}"]
 
                 if "badges" in msg and "Moderator" in msg["badges"]:
-                    # mods and other VIPs
                     txt[-1] += rf" {{\bord16\shad6}}*"
+                elif msg["uid"] in vips:
+                    txt = rf"{{\bord16\shad4}}_{{\bord4}}{txt}"
 
                 if shrimp:
                     txt.append(shrimp)
@@ -803,8 +814,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     w += h * 4  # donation is not included, TODO maybe
 
                 if "badges" in msg and "Moderator" in msg["badges"]:
-                    # mods and other VIPs
                     txt = rf"{{\bord24\shad6}}*{{\bord6}}{txt}"
+                elif msg["uid"] in vips:
+                    txt = rf"{{\bord16\shad4}}_{{\bord4}}{txt}"
 
                 len_boost = 0.7
                 td = (vw + w - w * len_boost) * shrimp_mul / ar.spd
