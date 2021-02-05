@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.6",
-    "date": "2020-10-18",
+    "version": "0.7",
+    "date": "2020-10-27",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -89,14 +89,11 @@ tested on cpython 3.8.1
    softchat.py -m2 "some.json"
 
  4 play the video (with --vf=fps=FRAMERATE due to danmaku)
-   mpv some.mkv --sub-files="some.json.ass" --sub-delay=-3 --vf=fps=60
+   mpv some.mkv --sub-files "some.json.ass" --sub-delay=-3 --vf=fps=60
 
 ==[ NEW ]==============================================================
 
- - convert to hiragana instead of katakana
- - fix trailing blank lines in sidebar mode
- - slightly better fix for the mecab dll location
- - examples/notes at the bottom
+ - fix how ASS special-characters "\", "{" and "}" are encoded
 
 ==[ TODO ]=============================================================
 
@@ -264,7 +261,29 @@ def hms(s):
 
 
 def assan(x):
-    return x.replace("{", "<").replace("}", ">").replace('\\', '\\{}')
+    # there is no standardization on escaping ["{", "}", "\\"]:
+    #   the commented one is for aegisub,
+    #   the enabled one is for mpv
+    
+    # aegsiub:
+    # return x.replace("{", "<").replace("}", ">").replace('\\', '\\{}')
+
+    # mpv:
+    ret = ''
+    for c, nc in zip(x, x[1:] + '\n'):
+        if c == '{':
+            ret += '\\{'
+        elif c == '}':
+            ret += '\\}'
+        elif c == '\\' and nc in ['N', 'n', 'h']:
+            ret += '\\\\'
+        else:
+            ret += c
+
+    # mpv:
+    #   there is no way to encode a literal \ before a markup {
+    #   so the lines must end with a whitespace 
+    return ret + " "
 
 
 def main():
