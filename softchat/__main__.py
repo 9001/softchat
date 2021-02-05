@@ -2,7 +2,7 @@
 
 about = {
     "name": "softchat",
-    "version": "0.9",
+    "version": "0.10",
     "date": "2020-11-08",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
@@ -65,6 +65,9 @@ tested on cpython 3.8.1
  - REQUIRED:
    python -m pip install --user pillow
 
+ - REQUIRED:
+   python -m pip install --user fontTools
+
  - OPTIONAL (not yet implemented here):
    python -m pip install --user git+https://github.com/googlefonts/nototools.git@v0.2.13#egg=nototools
 
@@ -95,8 +98,13 @@ tested on cpython 3.8.1
 
 ==[ NEW ]==============================================================
 
- - danmaku tries to center the text as much as possible,
-   the previous behavior can be enabled with --spread
+ - creates a modified version of NotoSansCJKjp-Regular with reduced
+   line height; this font must be installed or muxed into the video
+
+ - in mode 1, reduce filesize to 45% and num.events to 3.6%,
+   makes mpv perform much better, especially with standalone subtitles
+
+ - switched ass coordinate alignment from top-left to bottom-left
 
 ==[ TODO ]=============================================================
 
@@ -195,13 +203,62 @@ except:
 class TextStuff(object):
     def __init__(self, sz):
         self.sz = sz
-        self.font = ImageFont.truetype("NotoSansCJKjp-Regular.otf", size=sz)
+        self.otf_src = self.resolve_path("noto-hinted/NotoSansCJKjp-Regular.otf")
+        self.otf_mod = self.resolve_path("noto-hinted/SquishedNotoSansCJKjp-Regular.otf")
+        if not os.path.exists(self.otf_mod):
+            self.conv_otf()
+
+        self.font = ImageFont.truetype(self.otf_mod, size=sz)
         self.im = Image.new("RGB", (3840, 2160), "white")
         self.imd = ImageDraw.Draw(self.im)
         self.pipe_width = self.font.getsize('|')[0]
         self.font_ofs = self.font.getmetrics()[1]
         self.cache = {}
         self.vsize = self.caching_vsize
+
+    def resolve_path(self, path):
+        return os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
+
+    def conv_otf(self):
+        #import fontline.commands as flc
+        #
+        #flc.modify_linegap_percent(self.otf_src, "30")
+        #x = flc.get_linegap_percent_filepath(self.otf_src, "30")
+        #os.rename(x, self.otf_mod)
+
+        from fontTools.ttLib import TTFont, newTable
+
+        info("creating squished font, pls wait")
+        mul = 1.1
+        font = TTFont(self.otf_src)
+        baseAsc = font['OS/2'].sTypoAscender
+        baseDesc = font['OS/2'].sTypoDescender
+        font['hhea'].ascent = round(baseAsc * mul)
+        font['hhea'].descent = round(baseDesc * mul)
+        font['OS/2'].usWinAscent = round(baseAsc * mul)
+        font['OS/2'].usWinDescent = round(baseDesc * mul) * -1
+
+        xfn = "softchat.xml"
+        font.saveXML(xfn, tables=['name'])
+        with open(xfn, 'r', encoding='utf-8') as f:
+            xml = f.read()
+
+        xml = xml.replace('Noto Sans', 'Squished Noto Sans')
+        xml = xml.replace('NotoSans', 'SquishedNotoSans')
+        with open(xfn, 'w', encoding='utf-8') as f:
+            f.write(xml)
+
+        font['name'] = newTable('name')
+        font.importXML(xfn)
+        os.unlink(xfn)
+        
+        try:
+            del font['post'].mapping['Delta#1']
+        except:
+            pass
+
+        info(f'writing {self.otf_mod}')
+        font.save(self.otf_mod)
 
     def vsize_impl(self, text):
         w, h = self.imd.textsize('|' + text.replace('\n', '\n|'), self.font)
@@ -314,7 +371,7 @@ def main():
         sys.exit(1)
 
     if not ar.sz:
-        ar.sz = 24 if ar.m == 1 else 32
+        ar.sz = 18 if ar.m == 1 else 24
         info(f"fontsize {ar.sz} pt")
 
     vw, vh = [int(x) for x in ar.r.split('x')]
@@ -462,13 +519,20 @@ def main():
 
         vtxt = [x for x in vtxt if x.strip()]
 
+        # pillow height calculation is off by a bit; this is roughly it i think
+        sx, sy = vsz
+        sy = int(sy + fofs * 2.5 + 0.8)
+
+        # fix width due to fontsquish
+        sx = int(sx * 1.2)
+
         if n_msg % 100 == 0:
             info('  {} / {}   {}%   {}   {}\n   {}\n'.format(
                 n_msg,
                 len(jd),
                 int((n_msg*100)/len(jd)),
                 t_hms,
-                vsz,
+                [sx, sy],
                 '\n   '.join(vtxt)))
 
         nick = msg["author"]
@@ -478,8 +542,8 @@ def main():
         o = {
             "nick": nick,
             "t0": t_fsec,
-            "sx": vsz[0],
-            "sy": vsz[1],
+            "sx": sx,
+            "sy": sy,
             "txt": vtxt
         }
 
@@ -492,7 +556,7 @@ def main():
         
         msgs.append(o)
 
-        #if n_msg > 5000:  # opt
+        #if n_msg > 1000:  # opt
         #    break
     
     if ar.f:
@@ -530,7 +594,7 @@ Video Zoom Percent: 1.000000
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: a,Noto Sans CJK JP Regular,{sz},&H00FFFFFF,&H000000FF,&H{back}000000,&H{shad}000000,0,0,0,0,100,100,0,0,{opaq},2,1,7,0,0,0,1
+Style: a,Squished Noto Sans CJK JP Regular,{sz},&H00FFFFFF,&H000000FF,&H{back}000000,&H{shad}000000,0,0,0,0,100,100,0,0,{opaq},2,1,1,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -578,6 +642,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if ar.m == 1:
                 # text = colored nick followed by the actual lines, ass-escaped
                 txt = [rf"{{\3c&H{c}&}}{nick}"]
+
+                if 'badges' in msg and 'Moderator' in msg['badges']:
+                    # mods and other VIPs
+                    txt[-1] += rf" {{\bord16\shad6}}*"
+
                 if shrimp:
                     txt.append(shrimp)
 
@@ -586,30 +655,44 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 # show new messages bottom-left (heh)
                 msg["txt"] = txt
                 msg["px"] = bx
-                msg["py"] = by + bh - msg["sy"] - fofs / 2  # or something idgi
+                msg["py"] = by + bh
                 
                 ta = hms(msg["t0"])
                 tb = hms(next_msg["t0"] if next_msg else msg["t0"] + 10)
 
                 rm = 0
                 for m in vis:
-                    m["py"] -= msg["sy"]
-                    if m["py"] + m["sy"] < by:
+                    # i'll be honest, no idea why the *1.13 is necessary
+                    m["py"] -= msg["sy"] * 1.13
+                    if m["py"] - m["sy"] < by:
                         #debug('drop {} at {}'.format(hms(m["t0"]), ta))
                         rm += 1
 
                 vis = vis[rm:] + [msg]
 
-                for m in vis:
-                    step = m["sy"] / len(m["txt"])
-                    x = m["px"]
-                    y = m["py"]
-                    for ln in m["txt"]:
-                        txt = r'{{\pos({},{})}}{}'.format(x, y, ln)
-                        x = m["px"] + 8
-                        y += step
-                        f.write("Dialogue: 0,{},{},a,,0,0,0,,{}\n".format(
-                            ta, tb, txt).encode('utf-8'))
+                if True:
+                    # rely on squished font for linespacing reduction
+                    txt = r'{{\pos({},{})}}'.format(bx, by + bh)
+                    for m in vis:
+                        pad = ""
+                        for ln in m["txt"]:
+                            txt += pad + ln + r"\N{\r}"
+                            pad = r"\h\h"
+                    
+                    f.write("Dialogue: 0,{},{},a,,0,0,0,,{}\n".format(
+                        ta, tb, txt).encode('utf-8'))
+                else:
+                    # old approach, one ass entry for each line
+                    for m in vis:
+                        step = m["sy"] / len(m["txt"])
+                        x = m["px"]
+                        y = m["py"]
+                        for ln in m["txt"]:
+                            txt = r'{{\pos({},{})}}{}'.format(x, y, ln)
+                            x = m["px"] + 8
+                            y += step
+                            f.write("Dialogue: 0,{},{},a,,0,0,0,,{}\n".format(
+                                ta, tb, txt).encode('utf-8'))
             else:
                 txts, t0, w, h = [msg[x] for x in ["txt", "t0", "sx", "sy"]]
                 txt = '\\N'.join(txts)
@@ -617,11 +700,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 #if txt.startswith('SilkTouch is an enchant for picaxe'):
                 #    print('a')
                 
-                # pillow height calculation is off by a bit; this is roughly it i think
-                h = int(h + fofs * 0.5)
-
                 # ass linespacing is huge, compensate (wild guess btw)
-                h += ar.sz * 0.25 * (len(txts) - 1)
+                h += int(ar.sz * 0.25 * (len(txts) - 1) + 0.99) - 6
                 
                 shrimp_mul = 1
                 if shrimp:
@@ -677,52 +757,53 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
                 ymax = vh - h
                 frees = [[ymax, 0, ymax]]  # size, y0, y1
-                for y1, y2, _, _, _ in sorted(taken8):
-                    rm = []
-                    add = []
-                    for free in frees:
-                        _, fy1, fy2 = free
+                for lst in [taken8, taken5]:
+                    for y1, y2, _, _, _ in sorted(lst):
+                        rm = []
+                        add = []
+                        for free in frees:
+                            _, fy1, fy2 = free
 
-                        if fy1 >= y2 or y1 >= fy2:
-                            # does not intersect
-                            continue
+                            if fy1 >= y2 or y1 >= fy2:
+                                # does not intersect
+                                continue
 
-                        elif fy1 <= y1 and fy2 >= y2:
-                            # sub slices range in half, split it
-                            rm.append(free)
-                            
-                            nfsz = y1 - fy1
-                            if nfsz > h / 3.0:
-                                # h/3 to ensure less than 33% overlap
-                                add.append([nfsz, fy1, y1])
+                            elif fy1 <= y1 and fy2 >= y2:
+                                # sub slices range in half, split it
+                                rm.append(free)
+                                
+                                nfsz = y1 - fy1
+                                if nfsz > h / 3.0:
+                                    # h/3 to ensure less than 33% overlap
+                                    add.append([nfsz, fy1, y1])
 
-                            nfsz = fy2 - y2
-                            if nfsz > h / 3.0:
-                                add.append([nfsz, y2, fy2])
+                                nfsz = fy2 - y2
+                                if nfsz > h / 3.0:
+                                    add.append([nfsz, y2, fy2])
 
-                        elif y2 >= fy1:
-                            # sub slices top of free
-                            rm.append(free)
-                            
-                            nfsz = fy2 - y2
-                            if nfsz > h / 3.0:
-                                add.append([nfsz, y2, fy2])
+                            elif y2 >= fy1:
+                                # sub slices top of free
+                                rm.append(free)
+                                
+                                nfsz = fy2 - y2
+                                if nfsz > h / 3.0:
+                                    add.append([nfsz, y2, fy2])
 
-                        elif y1 <= fy2:
-                            # slices bottom
-                            rm.append(free)
+                            elif y1 <= fy2:
+                                # slices bottom
+                                rm.append(free)
 
-                            nfsz = y1 - fy1
-                            if nfsz > h / 3.0:
-                                add.append([nfsz, fy1, y1])
+                                nfsz = y1 - fy1
+                                if nfsz > h / 3.0:
+                                    add.append([nfsz, fy1, y1])
 
-                        else:
-                            raise Exception("fug")
-                
-                    for x in rm:
-                        frees.remove(x)
+                            else:
+                                raise Exception("fug")
                     
-                    frees.extend(add)
+                        for x in rm:
+                            frees.remove(x)
+                        
+                        frees.extend(add)
 
                 if not frees:
                     # can't be helped, pick a random y to collide in
@@ -754,12 +835,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                                 best = this
                                 y = y1 - h
 
+                y = int(y)
+
                 msg["t1"] = t1
                 msg["p8"] = p8
                 msg["p5"] = p5
                 msg["px"] = vw
                 msg["py"] = y
-                msg["txt"] = rf"{{\move({vw},{y},{-w},{y})\3c&H{c}&}}{txt}{{\fscx40\fscy40\bord1}}\N{nick}"
+                msg["sy"] = h
+                msg["txt"] = rf"{{\move({vw},{y+h},{-w},{y+h})\3c&H{c}&}}{txt}{{\fscx40\fscy40\bord1}}\N{nick}"
                 vis.append(msg)
 
                 ln = "Dialogue: 0,{},{},a,,0,0,0,,{}\n".format(
