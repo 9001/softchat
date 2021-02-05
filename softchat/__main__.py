@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.17",
-    "date": "2021-01-06",
+    "version": "0.18",
+    "date": "2021-01-07",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -51,13 +51,20 @@ from PIL import ImageFont, ImageDraw, Image
  - after an upgrade, you can reconvert old rips like this:
      grep -lE '^Title: .*softchat' -- *.ass | tr '\n' '\0' | xargs -0rtl ../dev/softchat.py -m2 --
 
+ - youtube VOD chatlogs are incomplete (about 80% of messages are lost)
+     so softchat can now take multiple chat JSONs to splice together:
+     it is recommended to run chat_replay_downloader.py twice,
+     first when the stream is live and then afterwards for the VOD chat;
+     when running softchat, the VOD json should be the first file provided,
+     followed by any live recordings to splice messages from
+
 ==[ DEPENDENCIES ]=====================================================
 each version below is the latest as of writing,
 tested on cpython 3.8.1
 
  - chat rips made using chat_replay_downloader.py;
    latest-tested may at times have softchat-specific modifications
-   but upstream is likely more maintained:
+   but upstream is likely more maintained and CURRENTLY RECOMMENDED:
      latest-tested: https://ocv.me/dev/?chat_replay_downloader.py
      upstream: https://github.com/xenova/chat-replay-downloader/blob/master/chat_replay_downloader.py
 
@@ -102,7 +109,7 @@ tested on cpython 3.8.1
 
 ==[ NEW ]==============================================================
 
- - support macos
+ - interleaving of multiple chat.json files to grab all messages
 
 ==[ TODO ]=============================================================
 
@@ -170,20 +177,20 @@ try:
     # help python find libmecab.dll, adjust this to fit your env if necessary
     dll_path = None
     for base in sys.path:
-        x = os.path.join(base, 'fugashi')
-        if os.path.exists(os.path.join(x, 'cli.py')) and not dll_path:
+        x = os.path.join(base, "fugashi")
+        if os.path.exists(os.path.join(x, "cli.py")) and not dll_path:
             dll_path = x
         x2 = os.path.join(x, "../../../lib/site-packages/fugashi")
         if os.path.exists(x2):
             dll_path = x2
             break
-    
+
     if not dll_path:
-        raise Exception('could not find fugashi installation path')
+        raise Exception("could not find fugashi installation path")
 
     if WINDOWS:
         os.add_dll_directory(dll_path)
-    
+
     from fugashi import Tagger
 
     dicrc = os.path.join(dll_path, "dicrc")
@@ -389,6 +396,10 @@ def get_ff_dur(fn):
     return float(ret)
 
 
+class Okay(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
+    pass
+
+
 def main():
     t0_main = time.time()
 
@@ -410,8 +421,9 @@ def main():
     ]
 
     ap = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=Okay,
         description="convert modified chat_replay_downloader.py json into box-confined or danmaku-style softsubs",
+        epilog="notes:\n  The first JSON_FILE should be the VOD download,\n  followed by any live-captures (to supplement\n  the messages which are lost in the VOD chat)"
     )
 
     # fmt: off
@@ -423,7 +435,7 @@ def main():
     ap.add_argument("--spd", metavar="SPEED", type=int, default=256, help="[danmaku] pixels/sec")
     ap.add_argument("--spread", action="store_true", help="[danmaku] even distribution")
     ap.add_argument("--kana", action="store_true", help="convert kanji to kana")
-    ap.add_argument("fn", metavar="JSON_FILE")
+    ap.add_argument("fn", metavar="JSON_FILE", nargs="+")
     ar = ap.parse_args()
     # fmt: on
 
@@ -444,13 +456,112 @@ def main():
     z = TextStuff(ar.sz)
     fofs = z.font_ofs
 
-    info(f"loading {ar.fn}")
-    with open(ar.fn, "r", encoding="utf-8") as f:
-        jd = json.load(f)
+    jd = []
+    seen = set()
+    for fn in ar.fn:
+        info(f"loading {fn}")
+        with open(fn, "r", encoding="utf-8") as f:
+            jd2 = json.load(f)
+            for m in jd2:
+                key = f"{m['timestamp']}\n{m['author_id']}"
+                if key not in seen:
+                    seen.add(key)
+                    jd.append(m)
+
+    # jd.sort(key=operator.attrgetter("timestamp"))
+    jd.sort(key=lambda x: x["timestamp"])
+    unix_ofs = None
+    for x in jd:
+        unix = x["timestamp"] / 1_000_000.0
+        t = x.get("video_offset_time_msec", 0)
+        if t >= 10_000:
+            video = t / 1000.0
+            unix_ofs = unix - video
+            break
+
+    if unix_ofs is None:
+        raise Exception(
+            "could not find video_offset_time_msec in json, please use softchat v0.17 or older if your chat json was created with a really old chat_replay_downloader"
+        )
+
+    debug(f"unixtime offset = {unix_ofs:.3f}")
+    debug("adding video offset to all messages")
+    n_interp = 0
+    for x in jd:
+        unix = x["timestamp"] / 1_000_000.0
+        t = x.get("video_offset_time_msec", None)
+        if t is None:
+            n_interp += 1
+            sec = unix - unix_ofs
+            isec = int(sec)
+            x["video_offset_time_msec"] = 1000 * sec
+            x["time_text"] = f"{isec // 60}:{isec % 60:02d}"
+            x["time_in_seconds"] = isec
+        elif t >= 10_000 and "amount" not in x:
+            video = t / 1000.0
+            new_ofs = unix - video
+            # print(f"{unix:.3f}, {video:.3f}, {x['time_text']}, {x['time_in_seconds']}")
+            diff = abs(new_ofs - unix_ofs)
+            if diff >= 10:
+                print(repr(x))
+                m = f"unix/video offset was {unix_ofs:.3f}, new {new_ofs:.3f} at {unix:.3f} and {video:.3f}, diff {new_ofs - unix_ofs:.3f}"
+                if diff >= 60:
+                    raise Exception(m)
+
+                warn(m + ", probably fine")
+
+            unix_ofs = new_ofs
+
+    jd.sort(key=lambda x: [x["video_offset_time_msec"], x["author_id"]])
+    info("{} msgs total, {} amended".format(len(jd), n_interp))
+
+    # find all dupe msgs from [author-id, message-text]
+    dupes = {}
+    seen = set()
+    for m in jd:
+        key = f"{m['author_id']}\n{m['message']}"
+        if key not in seen:
+            seen.add(key)
+            continue
+
+        try:
+            dupes[key].append(m)
+        except:
+            dupes[key] = [m]
+
+    # filter to messages that are closer than 10sec
+    dupes2 = {}
+    droplist = set()
+    for k, v in dupes.items():
+        vf = []
+        for m1, m2 in zip(v, v[1:]):
+            if m2["timestamp"] - m1["timestamp"] < 10_000_000:
+                droplist.add(f"{m['timestamp']}\n{m['author_id']}")
+                for m in [m1, m2]:
+                    if m not in vf:
+                        vf.append(m)
+        if vf:
+            dupes2[k] = vf
+
+    dupes = dupes2
+
+    if False:
+        for k, v in sorted(dupes.items(), key=lambda x: [-len(x[1]), x[0]])[:100]:
+            # warn("msg dupe:")
+            for v2 in v:
+                warn(repr(v2))
+
+    jd2 = []
+    for m in jd:
+        key = f"{m['timestamp']}\n{m['author_id']}"
+        if key not in droplist:
+            jd2.append(m)
+
+    jd = jd2
 
     media_fn = None
     for ext in ["webm", "mp4", "mkv"]:
-        f = ar.fn.rsplit(".", 1)[0] + "." + ext
+        f = ar.fn[0].rsplit(".", 1)[0] + "." + ext
         if os.path.exists(f):
             media_fn = f
             break
@@ -498,8 +609,13 @@ def main():
     for msg in jd:
         # break  # opt
 
-        nick = msg["author"]
         uid = msg["author_id"]
+        try:
+            nick = msg["author"]
+        except:
+            # warn(repr(msg))
+            # raise
+            msg["author"] = nick = uid
 
         # in case names change mid-stream
         pair = f"{nick}\n{uid}"
@@ -652,7 +768,7 @@ def main():
             "t0": t_fsec,
             "sx": sx,
             "sy": sy,
-            "txt": vtxt
+            "txt": vtxt,
         }
 
         if "amount" in msg:
@@ -673,10 +789,10 @@ def main():
         opts = {"back": "00", "shad": "80", "opaq": "1"}
 
     vis = []
-    if ar.fn.lower().endswith(".json"):
-        out_fn = ar.fn[:-5] + ".ass"
+    if ar.fn[0].lower().endswith(".json"):
+        out_fn = ar.fn[0][:-5] + ".ass"
     else:
-        out_fn = ar.fn + ".ass"
+        out_fn = ar.fn[0] + ".ass"
 
     info(f"creating {out_fn}")
     with open(out_fn, "wb") as f:
@@ -756,7 +872,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 # text = colored nick followed by the actual lines, ass-escaped
                 txt = [rf"{{\3c&H{c}&}}{nick}"]
 
-                if "badges" in msg and "Moderator" in msg["badges"]:
+                badges = msg.get("badges", [])
+                if not set(badges).isdisjoint(["Moderator", "Owner", "Verified"]):
                     txt[-1] += rf" {{\bord16\shad6}}*"
                 elif msg["uid"] in vips:
                     txt[-1] += rf" {{\bord16\shad4}}----"
@@ -1054,33 +1171,6 @@ chat_replay_downloader.py ame-minecraft-railway-research.json.json -output ame-m
 C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --interpolation=yes --blend-subtitles=yes --video-sync=display-resample --tscale=mitchell --hwdec=off --vo=direct3d
 
 # use --sub-files=some.ass to specify a sub with another name
-
-
-===[ junk ]============================================================
-
-..\dev\softchat.py -m 1 -b 320x600+960+32 ame-minecraft-railway-research-2-2.json && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --sub-files=ame-minecraft-railway-research-2-2.ass --sub-delay=-2 -ss 120
-
-cpy3: 15.46 sec @15k NOcache
-cpy3:  8.87 sec @15k 16k 24
-
-pypy: 18.75 sec @15k NOcache
-pypy: 15.32 sec @15k 128 32
-pypy: 13.32 sec @15k  1k 32
-pypy: 12.59 sec @15k  4k 64
-pypy: 12.23 sec @15k  4k 16
-pypy: 12.09 sec @15k  4k 32
-pypy: 12.10 sec @15k  8k 24
-pypy: 11.42 sec @15k 16k 64
-pypy: 11.39 sec @15k 16k 16
-pypy: 11.26 sec @15k 16k 32
-pypy: 11.23 sec @15k 16k 24
-
-cpy3 full: 46.45 unb 24
-cpy3 full: 48.56 32k 24
-pypy full: 54.92 unb 24
-pypy full: 57.34 32k 24
-
-grep -E '"(amount|hex|message|time_text)":|^    \},' ame-minecraft-railway-research-2.json | grep -E '"amount":' -C5 | less
 
 
 ===[ p5 and p8 overlay for mpv ]=======================================
