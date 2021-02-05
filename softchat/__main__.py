@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.7",
-    "date": "2020-10-27",
+    "version": "0.8",
+    "date": "2020-11-01",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -43,7 +43,7 @@ from PIL import ImageFont, ImageDraw, Image
      unless you have the subtitles render at your native screen res
 
      for example in mpv you could add these arguments:
-     --vo=direct3d --sub-delay=-3 --vf=fps=90
+     --vo=direct3d --sub-delay=-2 --vf=fps=90
 
      replace 90 with your monitor's fps
 
@@ -51,9 +51,11 @@ from PIL import ImageFont, ImageDraw, Image
 each version below is the latest as of writing,
 tested on cpython 3.8.1
 
- - chat rips made using the modified chat_replay_downloader.py
-     mod: https://ocv.me/dev/?chat_replay_downloader-3.py
-     orig: https://github.com/xenova/chat-replay-downloader/
+ - chat rips made using chat_replay_downloader.py;
+   latest-tested may at times have softchat-specific modifications
+   but upstream is likely more maintained:
+     latest-tested: https://ocv.me/dev/?chat_replay_downloader.py
+     upstream: https://github.com/xenova/chat-replay-downloader/blob/master/chat_replay_downloader.py
 
  - all the noto fonts in a subfolder called noto-hinted
      see https://www.google.com/get/noto/
@@ -83,17 +85,20 @@ tested on cpython 3.8.1
    use that filename below except replace extension as necessary
  
  2 download the chatlog:
-   chat_replay_downloader.py https://youtu.be/fgsfds -output "some.json"
+   chat_replay_downloader.py https://youtu.be/fgsfds -message_type all -o "some.json"
 
  3 convert the chatlog into subtitles (-m2=danmaku)
    softchat.py -m2 "some.json"
 
  4 play the video (with --vf=fps=FRAMERATE due to danmaku)
-   mpv some.mkv --sub-files "some.json.ass" --sub-delay=-3 --vf=fps=60
+   mpv some.mkv --sub-files "some.json.ass" --sub-delay=-2 --vf=fps=60
 
 ==[ NEW ]==============================================================
 
- - fix how ASS special-characters "\", "{" and "}" are encoded
+ - make nicknames unique by appending the user-id when necessary
+ - prepare for a theoretical case where the subs could desync
+ - support unmodified `chat_replay_downloader.py` as of
+     2020-11-01, 16:01, a83762f4b0dd0432e8f386d1a71b7c667b1fe618
 
 ==[ TODO ]=============================================================
 
@@ -330,8 +335,38 @@ def main():
     ptn_pre = re.compile(r'([　、。〇〉》」』】〕〗〙〛〜〞〟・…⋯！＂）＊－．／＞？＠＼］＿～｡｣･￭￮]+)')
     ptn_post = re.compile(r'([〈《「『【〔〖〘〚〝（＜［｀｢]+)')
 
+    info(f"deduping nicknames in {len(jd)} chat entries")
+    pair_seen = set()
+    nick_dupes = set()
+    nick_list = {}
+    for msg in jd:
+        nick = msg["author"]
+        uid = msg["author_id"]
+
+        # in case names change mid-stream
+        pair = f"{nick}\n{uid}"
+        if pair in pair_seen:
+            continue
+
+        pair_seen.add(pair)
+
+        try:
+            uids = nick_list[nick]
+            if uid not in uids:
+                uids.append(uid)
+                nick_dupes.add(nick)
+        except:
+            nick_list[nick] = [uid]
+        
+        #if nick == "McDoogle":
+        #    print(f"{nick} {uid} {msg['message']}")
+
+    info(f"tagged {len(nick_dupes)} dupes:")
+    for k, v in sorted(nick_list.items(), key=lambda x: [-len(x[1]), x[0]])[:20]:
+        info(f"  {len(v)}x {k}")
+
     msgs = []
-    info(f"converting {len(jd)} chat entries")
+    info(f"converting")
     last_msg = None
     for n_msg, msg in enumerate(jd):
         txt = msg['message'] or '--'
@@ -340,6 +375,33 @@ def main():
             continue
 
         last_msg = cmp_msg
+
+        try:
+            t_fsec = msg["video_offset_time_msec"] / 1000.
+            t_isec = msg["time_in_seconds"]
+            t_hms = msg["time_text"]
+        except:
+            # rip was made using a chat_replay_downloader.py from before 2020-11-01
+            t_fsec = msg["time_in_seconds"]
+            t_hms = msg["time_text"].split('.')[0]
+            t_isec = int(t_fsec)
+
+        if t_hms.startswith('-') or t_isec < 0:
+            continue
+
+        # time integrity check
+        try:
+            h, m, s = [int(x) for x in t_hms.split(':')]
+            t_isec2 = 60 * (60 * h + m) + s
+        except:
+            m, s = [int(x) for x in t_hms.split(':')]
+            t_isec2 = 60 * m + s
+
+        if int(t_fsec) != t_isec or t_isec != t_isec2:
+            # at some point, someone observed a difference between time_text
+            # and video_offset_time_msec, so please let me have a look at
+            # your chatlog json if you end up here
+            raise Exception(f"time drift [{t_fsec}] [{t_isec}] [{t_isec2}] [{t_hms}]\n  (pls provide this chat-rip to ed)")
 
         n_ascii = len(ptn_ascii.findall(txt))
         n_kanji = len(ptn_kanji.findall(txt))
@@ -406,13 +468,17 @@ def main():
                 n_msg,
                 len(jd),
                 int((n_msg*100)/len(jd)),
-                msg["time_text"],
+                t_hms,
                 vsz,
                 '\n   '.join(vtxt)))
 
+        nick = msg["author"]
+        if nick in nick_dupes:
+            nick += f"  ({msg['author_id']})"
+        
         o = {
-            "name": msg["author"],
-            "t0": msg["time_in_seconds"],
+            "nick": nick,
+            "t0": t_fsec,
             "sx": vsz[0],
             "sy": vsz[1],
             "txt": vtxt
@@ -450,7 +516,7 @@ def main():
     with open(out_fn, "wb") as f:
         f.write("""\
 [Script Info]
-Title: softchat.py
+Title: https://ocv.me/dev/?softchat.py
 ScriptType: v4.00+
 WrapStyle: 0
 ScaledBorderAndShadow: yes
@@ -487,8 +553,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if n_msg % 1000 == 1:
                 info(f"writing {hms(msg['t0'])}, #{n_msg} / {len(msgs)}")
             
-            name = msg["name"]
-            c = colormap.get(name, None)
+            nick = msg["nick"]
+            c = colormap.get(nick, None)
             if not c:
                 if ar.m == 1:
                     bri = 0.5
@@ -497,10 +563,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     bri = 0.4
                     sat = 0.8
 
-                c = zlib.crc32(name.encode('utf-8')) & 0xffffffff
+                c = zlib.crc32(nick.encode('utf-8')) & 0xffffffff
                 r, g, b = [int(x*255) for x in colorsys.hsv_to_rgb((c % 256) / 256.0, sat, bri)]
                 c = f'{r:02x}{g:02x}{b:02x}'
-                colormap[name] = c
+                colormap[nick] = c
 
             shrimp = None
             if 'shrimp' in msg:
@@ -508,12 +574,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 c2 = f"{c2[4:6]}{c2[2:4]}{c2[0:2]}"  # thx ass
                 shrimp = rf"{{\bord4\shad4\3c&H{c2}&\c&H000000&}}{msg['shrimp']}"
 
-            name = assan(name)
+            nick = assan(nick)
             msg["txt"] = [assan(x) for x in msg["txt"]]
 
             if ar.m == 1:
-                # text = colored name followed by the actual lines, ass-escaped
-                txt = [rf"{{\3c&H{c}&}}{name}"]
+                # text = colored nick followed by the actual lines, ass-escaped
+                txt = [rf"{{\3c&H{c}&}}{nick}"]
                 if shrimp:
                     txt.append(shrimp)
 
@@ -669,7 +735,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 msg["p5"] = p5
                 msg["px"] = vw
                 msg["py"] = y
-                msg["txt"] = rf"{{\move({vw},{y},{-w},{y})\3c&H{c}&}}{txt}{{\fscx40\fscy40\bord1}}\N{name}"
+                msg["txt"] = rf"{{\move({vw},{y},{-w},{y})\3c&H{c}&}}{txt}{{\fscx40\fscy40\bord1}}\N{nick}"
                 vis.append(msg)
 
                 ln = "Dialogue: 0,{},{},a,,0,0,0,,{}\n".format(
@@ -718,10 +784,10 @@ chat_replay_downloader.py ame-minecraft-railway-research.json.json -output ame-m
 ===[ danmaku / nnd-style ]=============================================
 
 # assumes your mpv config is interpolation=no, blend-subtitles=no
-..\dev\softchat.py -m 2 "ame-minecraft-railway-research-2.json" && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --vf=fps=90 --sub-delay=-3
+..\dev\softchat.py -m 2 "ame-minecraft-railway-research-2.json" && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --vf=fps=90 --sub-delay=-2
 
 # sanic
---vo=direct3d --sub-delay=-3 --vf=fps=75 --speed=1.2
+--vo=direct3d --sub-delay=-2 --vf=fps=75 --speed=1.2
 
 # alternate display mode, usually worse
 C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --interpolation=yes --blend-subtitles=yes --video-sync=display-resample --tscale=mitchell --hwdec=off --vo=direct3d
@@ -731,7 +797,7 @@ C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --interpolatio
 
 ===[ junk ]============================================================
 
-..\dev\softchat.py -m 1 -b 320x600+960+32 ame-minecraft-railway-research-2-2.json && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --sub-files=ame-minecraft-railway-research-2-2.json.ass --sub-delay=-3 -ss 120
+..\dev\softchat.py -m 1 -b 320x600+960+32 ame-minecraft-railway-research-2-2.json && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --sub-files=ame-minecraft-railway-research-2-2.json.ass --sub-delay=-2 -ss 120
 
 cpy3: 15.46 sec @15k NOcache
 cpy3:  8.87 sec @15k 16k 24
