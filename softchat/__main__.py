@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.8",
-    "date": "2020-11-01",
+    "version": "0.9",
+    "date": "2020-11-08",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -95,10 +95,8 @@ tested on cpython 3.8.1
 
 ==[ NEW ]==============================================================
 
- - make nicknames unique by appending the user-id when necessary
- - prepare for a theoretical case where the subs could desync
- - support unmodified `chat_replay_downloader.py` as of
-     2020-11-01, 16:01, a83762f4b0dd0432e8f386d1a71b7c667b1fe618
+ - danmaku tries to center the text as much as possible,
+   the previous behavior can be enabled with --spread
 
 ==[ TODO ]=============================================================
 
@@ -306,6 +304,7 @@ def main():
     ap.add_argument("-f", action='store_true', help='fill chat background')
     ap.add_argument("--sz", metavar='POINTS', type=int, default=0, help="font size")
     ap.add_argument("--spd", metavar='SPEED', type=int, default=256, help="[danmaku] pixels/sec")
+    ap.add_argument("--spread", action="store_true", help="[danmaku] even distribution")
     ap.add_argument("--kana", action="store_true", help="convert kanji to kana")
     ap.add_argument("fn", metavar='JSON_FILE')
     ar = ap.parse_args()
@@ -493,8 +492,7 @@ def main():
         
         msgs.append(o)
 
-        # 40000 01:54:37 SilkTouch is an enchant for picaxe
-        #if n_msg > 40000:
+        #if n_msg > 5000:  # opt
         #    break
     
     if ar.f:
@@ -654,24 +652,32 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 taken8 = []
                 taken5 = []
                 for m in vis:
-                    m_py, m_sy, m_p8, m_p5 = [m[x] for x in ["py", "sy", "p8", "p5"]]
+                    m_py, m_sy, m_p8, m_p5, m_txt = [m[x] for x in ["py", "sy", "p8", "p5", "txt"]]
 
                     if t0 > m_p5:
                         rm.append(m)
                         continue
 
                     if a8 < m_p8:
-                        taken8.append([m_py, m_py + m_sy, m_p8, m])
+                        #k = f"{m_py} {m_sy} {m_p8}"
+                        #if k in seen8:
+                        #    desc = json.dumps([seen8[k], m], indent=4, sort_keys=True)
+                        #    raise Exception(f"collision: {desc}")
+                        #
+                        #seen8[k] = m
+
+                        # add txt to avoid sorted() trying to compare m's
+                        taken8.append([m_py, m_py + m_sy, m_p8, m_txt, m])
 
                     if a5 < m_p5:
-                        taken5.append([m_py, m_py + m_sy, m_p5, m])
+                        taken5.append([m_py, m_py + m_sy, m_p5, m_txt, m])
 
                 for m in rm:
                     vis.remove(m)
 
                 ymax = vh - h
                 frees = [[ymax, 0, ymax]]  # size, y0, y1
-                for y1, y2, _, _ in sorted(taken8):
+                for y1, y2, _, _, _ in sorted(taken8):
                     rm = []
                     add = []
                     for free in frees:
@@ -721,14 +727,32 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if not frees:
                     # can't be helped, pick a random y to collide in
                     y = int(random.randrange(ymax))
-                    best = [2, y-1, y+1]
-                else:
+                elif ar.spread:
                     avail, y0, y1 = sorted(frees)[-1]
                     if avail <= h:
                         y = int(y0 + avail / 2)
                     else:
                         # just centering looks boring, let's rand
                         y = y0 + random.randrange(avail - h)
+                else:
+                    y = None
+                    best = 5318008
+                    target = vh / 2
+                    #print(json.dumps([target, frees], indent=4, sort_keys=True))
+                    for avail, y0, y1 in frees:
+                        if y0 <= target and y1 >= target + h:
+                            y = target
+                            break
+                        elif y0 >= target:
+                            this = y0 - target
+                            if best > this:
+                                best = this
+                                y = y0
+                        elif y1 <= target + h:
+                            this = target - (y1 - h)
+                            if best > this:
+                                best = this
+                                y = y1 - h
 
                 msg["t1"] = t1
                 msg["p8"] = p8
