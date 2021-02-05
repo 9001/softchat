@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.10",
-    "date": "2020-11-08",
+    "version": "0.11",
+    "date": "2020-11-09",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -20,6 +20,7 @@ import random
 import logging
 import argparse
 import colorsys
+import subprocess as sp
 from datetime import datetime
 from PIL import ImageFont, ImageDraw, Image
 
@@ -98,13 +99,7 @@ tested on cpython 3.8.1
 
 ==[ NEW ]==============================================================
 
- - creates a modified version of NotoSansCJKjp-Regular with reduced
-   line height; this font must be installed or muxed into the video
-
- - in mode 1, reduce filesize to 45% and num.events to 3.6%,
-   makes mpv perform much better, especially with standalone subtitles
-
- - switched ass coordinate alignment from top-left to bottom-left
+ - compare chat/video duration to detect truncated rips
 
 ==[ TODO ]=============================================================
 
@@ -346,6 +341,27 @@ def assan(x):
     return ret + " "
 
 
+def get_ff_dur(fn):
+    # ffprobe -hide_banner -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 foo.mkv
+    #   webm: n/a
+    #   mkv: n/a
+    #   mp4: numSec
+    # ffprobe -hide_banner -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 foo.mkv
+    #   webm: numSec
+    #   mkv: numSec
+    #   mp4: numSec (0.06 sec larger)
+
+    ret = sp.check_output([
+        'ffprobe',
+        '-hide_banner',
+        '-v', 'warning',
+        '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1',
+        fn])
+
+    return float(ret)
+
+
 def main():
     t0_main = time.time()
 
@@ -384,6 +400,37 @@ def main():
     info(f"loading {ar.fn}")
     with open(ar.fn, 'r', encoding='utf-8') as f:
         jd = json.load(f)
+
+    media_fn = None
+    for ext in ['webm', 'mp4', 'mkv']:
+        f = ar.fn.rsplit('.', 2)[0] + "." + ext
+        if os.path.exists(f):
+            media_fn = f
+            break
+
+    cdur_msg = None
+    cdur_err = "could not verify chat duration"
+    if not media_fn:
+        cdur_err += ": could not find media file"
+    else:
+        info("calculating media duration")
+        try:
+            chat_dur = jd[-1]["time_in_seconds"]
+            v_dur = get_ff_dur(media_fn)
+            delta = abs(chat_dur - v_dur)
+            perc = delta * 100.0 / max(v_dur, chat_dur)
+            if delta > 60:
+                cdur_err = f"media duration ({v_dur:.0f}sec) and chat duration ({chat_dur:.0f}sec) differ by {delta:.0f}sec ({perc:.2f}%)"
+            else:
+                cdur_err = None
+                cdur_msg = f"chat duration appears correct; {v_dur:.0f}sec - {chat_dur:.0f}sec = {delta:.0f}sec ({perc:.2f}%)"
+        except Exception as ex:
+            cdur_err += ": " + repr(ex)
+
+    if cdur_err:
+        warn(cdur_err)
+    else:
+        info(cdur_msg)
 
     ptn_kanji = re.compile(r'[\u4E00-\u9FAF]')
     ptn_kana = re.compile(r'[\u3040-\u30FF]')
@@ -858,6 +905,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         for ln in supers:
             f.write(ln)
+
+    if cdur_err:
+        warn(cdur_err)
+    else:
+        info(cdur_msg)
 
     #from pprint import pprint; pprint(msgs[-5:])
     t1_main = time.time()
