@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.13",
-    "date": "2020-11-16",
+    "version": "0.14",
+    "date": "2020-11-17",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -49,7 +49,7 @@ from PIL import ImageFont, ImageDraw, Image
      replace 90 with your monitor's fps
 
  - after an upgrade, you can reconvert old rips like this:
-     for f in *.json.ass; do ./softchat.py -m2 -- "${f%.*}"; done
+     grep -lE '^Title: .*softchat' -- *.ass | tr '\n' '\0' | xargs -0rtl ../dev/softchat.py -m2 --
 
 ==[ DEPENDENCIES ]=====================================================
 each version below is the latest as of writing,
@@ -97,12 +97,14 @@ tested on cpython 3.8.1
  3 convert the chatlog into subtitles (-m2=danmaku)
    softchat.py -m2 "some.json"
 
- 4 play the video (with --vf=fps=FRAMERATE due to danmaku)
-   mpv some.mkv --sub-files "some.json.ass" --sub-delay=-2 --vf=fps=60
+ 4 play the video (with --vf=fps=$SCREEN_HZ to make danmaku smoother)
+   mpv some.mkv --sub-delay=-2 --vf=fps=60
 
 ==[ NEW ]==============================================================
 
- - fix collision preference
+ - change extension from ".json.ass" to ".ass"
+ - increase speed boost of longer messages
+ - try even harder to avoid collisions
 
 ==[ TODO ]=============================================================
 
@@ -645,7 +647,11 @@ def main():
         opts = {"back": "00", "shad": "80", "opaq": "1"}
 
     vis = []
-    out_fn = ar.fn + ".ass"
+    if ar.fn.lower().endswith(".json"):
+        out_fn = ar.fn[:-5] + ".ass"
+    else:
+        out_fn = ar.fn + ".ass"
+
     info(f"creating {out_fn}")
     with open(out_fn, "wb") as f:
         f.write(
@@ -800,17 +806,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     # mods and other VIPs
                     txt = rf"{{\bord24\shad6}}*{{\bord6}}{txt}"
 
-                len_boost = 0.5
+                len_boost = 0.7
                 td = (vw + w - w * len_boost) * shrimp_mul / ar.spd
                 t1 = t0 + td
 
-                # collision detection polls at 60%..80% (critical) and 30..90% (prefer)
-                # from the left, figure out timestamps when the right-side hits those
+                # collision detection polls at certain points from the left,
+                # so figure out timestamps when the right-side hits those
                 abs_spd = (vw + w * 1.0) / td
-                p9 = t0 + (w + vw * 0.1) / abs_spd
+                p9 = t0 + (w + vw * 0.1) / abs_spd  # 10% right
                 p8 = t0 + (w + vw * 0.2) / abs_spd
                 p5 = t0 + (w + vw * 0.5) / abs_spd
                 p3 = t0 + (w + vw * 0.7) / abs_spd
+                p1 = t0 + (w + vw * 0.9) / abs_spd  # 10% left
 
                 # and when the left-side hits those,
                 # to compare against other pN's and find a free slot
@@ -818,38 +825,35 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 a8 = t0 + (vw * 0.2) / abs_spd
                 a5 = t0 + (vw * 0.5) / abs_spd
                 a3 = t0 + (vw * 0.7) / abs_spd
+                a1 = t0 + (vw * 0.9) / abs_spd
 
                 rm = []
-                taken_crit = []
-                taken_prefer = []
+                taken_best = []  # 10..90%
+                taken_good = []  # 30..90%
+                taken_okay = []  # 60..80%
                 for m in vis:
-                    m_py, m_sy, m_p9, m_p8, m_p5, m_p3, m_txt = [
-                        m[x] for x in ["py", "sy", "p9", "p8", "p5", "p3", "txt"]
+                    m_py, m_sy, m_p9, m_p8, m_p5, m_p3, m_p1, m_txt = [
+                        m[x] for x in ["py", "sy", "p9", "p8", "p5", "p3", "p1", "txt"]
                     ]
 
-                    # if (
-                    #    "So what's the to do list for today G" in m_txt
-                    #    and msg["nick"] == "AverageDoggo"
-                    # ):
+                    # if "kusa peko" in m_txt and "consequance" in txt:
                     #    print("a")
 
                     if t0 > m_p5:
                         rm.append(m)
                         continue
 
-                    if a8 < m_p8 or a5 < m_p5:
-                        # k = f"{m_py} {m_sy} {m_p8}"
-                        # if k in seen8:
-                        #    desc = json.dumps([seen8[k], m], indent=4, sort_keys=True)
-                        #    raise Exception(f"collision: {desc}")
-                        #
-                        # seen8[k] = m
+                    entry = [m_py, m_py + m_sy, id(m)]
 
+                    if a8 < m_p8 or a5 < m_p5:
                         # add txt to avoid sorted() trying to compare m's
-                        taken_crit.append([m_py, m_py + m_sy, m_p8, m_txt, m])
+                        taken_okay.append(entry)
 
                     if a9 < m_p9 or a3 < m_p3:
-                        taken_prefer.append([m_py, m_py + m_sy, m_p5, m_txt, m])
+                        taken_good.append(entry)
+
+                    if a9 < m_p9 or a1 < m_p1:
+                        taken_best.append(entry)
 
                 for m in rm:
                     vis.remove(m)
@@ -857,9 +861,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 ymax = vh - h
                 overlap_mul = 0.9
                 frees_merged = []  # crit + prefer
-                for lst in [taken_prefer, taken_crit]:
+                for lst in [taken_best, taken_good, taken_okay]:
                     frees = [[ymax, 0, ymax]]  # size, y0, y1
-                    for y1, y2, _, _, _ in sorted(lst):
+                    for y1, y2, _ in sorted(lst):
                         rm = []
                         add = []
                         for free in frees:
@@ -909,10 +913,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     frees_merged.append(frees)
                     overlap_mul = 0.8  # allow 20% overlap in critical
 
-                # fallback to critical if no free prefer
-                frees = frees_merged[0]
-                if not frees:
-                    frees = frees_merged[1]
+                # use the first non-zero list of free slots
+                # (ordered by least amount of horizontal collision)
+                frees = next((x for x in frees_merged if x), None)
 
                 if not frees:
                     # can't be helped, pick a random y to collide in
@@ -955,6 +958,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 msg["p8"] = p8
                 msg["p5"] = p5
                 msg["p3"] = p3
+                msg["p1"] = p1
                 msg["px"] = vw
                 msg["py"] = y
                 msg["sy"] = h
@@ -995,11 +999,11 @@ r"""
 
 chat_replay_downloader.py https://www.youtube.com/watch?v=7LXgVlrfsWw -output ars-37-minecraft-3.json
 
-softchat.py ..\yt\ars-37-minecraft-3.json -b 340x500+32+32 && copy /y ..\yt\ars-37-minecraft-3.json.ass ..\yt\ars-37-minecraft-3.json.1.ass
+softchat.py ..\yt\ars-37-minecraft-3.json -b 340x500+32+32 && copy /y ..\yt\ars-37-minecraft-3.ass ..\yt\ars-37-minecraft-3.1.ass
 
-softchat.py ..\yt\ars-37-minecraft-3.json -b 340x500+360+32 --kana && copy /y ..\yt\ars-37-minecraft-3.json.ass ..\yt\ars-37-minecraft-3.json.2.ass
+softchat.py ..\yt\ars-37-minecraft-3.json -b 340x500+360+32 --kana && copy /y ..\yt\ars-37-minecraft-3.ass ..\yt\ars-37-minecraft-3.2.ass
 
-(head -n 21 ars-37-minecraft-3.json.1.ass ; (tail -n +22 ars-37-minecraft-3.json.1.ass; tail -n +22 ars-37-minecraft-3.json.2.ass) | sort) > ars-37-minecraft-3.json.ass
+(head -n 21 ars-37-minecraft-3.1.ass ; (tail -n +22 ars-37-minecraft-3.1.ass; tail -n +22 ars-37-minecraft-3.2.ass) | sort) > ars-37-minecraft-3.ass
 
 c:\users\ed\bin\mpv.com "..\yt\ars-37-minecraft-3.json.mkv" -ss 1:15:20
 
@@ -1026,7 +1030,7 @@ C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --interpolatio
 
 ===[ junk ]============================================================
 
-..\dev\softchat.py -m 1 -b 320x600+960+32 ame-minecraft-railway-research-2-2.json && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --sub-files=ame-minecraft-railway-research-2-2.json.ass --sub-delay=-2 -ss 120
+..\dev\softchat.py -m 1 -b 320x600+960+32 ame-minecraft-railway-research-2-2.json && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --sub-files=ame-minecraft-railway-research-2-2.ass --sub-delay=-2 -ss 120
 
 cpy3: 15.46 sec @15k NOcache
 cpy3:  8.87 sec @15k 16k 24
