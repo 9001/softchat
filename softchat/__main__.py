@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.5",
-    "date": "2020-10-14",
+    "version": "0.6",
+    "date": "2020-10-18",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -24,6 +24,29 @@ from datetime import datetime
 from PIL import ImageFont, ImageDraw, Image
 
 """
+==[ NOTES / README ]===================================================
+
+ - superchats will display for 2x the time and with inverted colors
+
+ - moderator messages are emphasized
+     (larger outline, and prefixed with a ball)
+
+ - mode 1, sidebar chat, creates a huge amount of subtitle events
+     which many media players (including mpv) will struggle with
+
+     for example, seeking will take like 5sec
+
+     you can fix this by muxing the subtitle into the vid:
+     ffmpeg -i the.webm -i the.ass -c copy muxed.mkv
+
+ - mode 2, danmaku, will look blurry and/or jerky in most players
+     unless you have the subtitles render at your native screen res
+
+     for example in mpv you could add these arguments:
+     --vo=direct3d --sub-delay=-3 --vf=fps=90
+
+     replace 90 with your monitor's fps
+
 ==[ DEPENDENCIES ]=====================================================
 each version below is the latest as of writing,
 tested on cpython 3.8.1
@@ -40,7 +63,7 @@ tested on cpython 3.8.1
  - REQUIRED:
    python -m pip install --user pillow
 
- - OPTIONAL (recommended):
+ - OPTIONAL (not yet implemented here):
    python -m pip install --user git+https://github.com/googlefonts/nototools.git@v0.2.13#egg=nototools
 
  - OPTIONAL (recommended):
@@ -51,15 +74,39 @@ tested on cpython 3.8.1
    python -m pip install --user mecab-python3
    # bring your own dictionaries
 
+==[ HOW-TO / EXAMPLE ]=================================================
+
+ 1 download the youtube video, for example with youtube-dl or
+   https://ocv.me/dev/?ytdl-tui.py
+
+   it will eventually say "Merging formats into some.mkv",
+   use that filename below except replace extension as necessary
+ 
+ 2 download the chatlog:
+   chat_replay_downloader.py https://youtu.be/fgsfds -output "some.json"
+
+ 3 convert the chatlog into subtitles (-m2=danmaku)
+   softchat.py -m2 "some.json"
+
+ 4 play the video (with --vf=fps=FRAMERATE due to danmaku)
+   mpv some.mkv --sub-files="some.json.ass" --sub-delay=-3 --vf=fps=60
+
 ==[ NEW ]==============================================================
 
- - hilight messages from mods
+ - convert to hiragana instead of katakana
+ - fix trailing blank lines in sidebar mode
+ - slightly better fix for the mecab dll location
+ - examples/notes at the bottom
 
 ==[ TODO ]=============================================================
 
  - build optimal font using noto-merge-fonts
  - per-line background shading (optional)
  - more stuff probably
+
+==[ RELATED ]==========================================================
+
+ - https://ocv.me/dev/?gist/chat-heatmap.py
 
 """
 
@@ -70,32 +117,6 @@ try:
     HAVE_NOTO_MERGE = True
 except ImportError:
     HAVE_NOTO_MERGE = False
-
-
-try:
-    # TODO
-    #   help python find libmecab.dll, adjust this to fit your env
-    dll_path = r'C:\Users\ed\AppData\Roaming\Python\lib\site-packages\fugashi'
-    os.add_dll_directory(dll_path)
-    from fugashi import Tagger
-    
-    dicrc = os.path.join(dll_path, 'dicrc')
-    with open(dicrc, 'wb') as f:
-        f.write('\n'.join([
-            r'node-format-yomi = %f[9] ',
-            r'unk-format-yomi = %m',
-            r'eos-format-yomi  = \n',
-            ''
-        ]).encode('utf-8'))
-
-    wakati = Tagger('-Owakati')
-    yomi = Tagger('-Oyomi -r ' + dicrc.replace('\\', '\\\\'))
-
-    #import MeCab
-    #wakati = MeCab.Tagger('-Owakati')
-    HAVE_TOKENIZER = True
-except:
-    HAVE_TOKENIZER = False
 
 
 debug = logging.debug
@@ -123,6 +144,52 @@ class LoggerFmt(logging.Formatter):
         ts = datetime.utcfromtimestamp(record.created)
         ts = ts.strftime("%H:%M:%S.%f")[:-3]
         return f"\033[0;36m{ts}{ansi} {record.msg}\033[0m"
+
+
+if __name__ == '__main__':
+    if WINDOWS:
+        os.system("")
+
+    logging.basicConfig(
+        level=logging.INFO,  # INFO DEBUG
+        format="\033[36m%(asctime)s.%(msecs)03d\033[0m %(message)s",
+        datefmt="%H%M%S",
+    )
+    lh = logging.StreamHandler(sys.stderr)
+    lh.setFormatter(LoggerFmt())
+    logging.root.handlers = [lh]
+
+
+try:
+    # help python find libmecab.dll, adjust this to fit your env,
+    # TODO make this fix less bad (linux/macos, python versions, sys/user)
+    home = os.path.expanduser('~')
+    dll_path = os.path.join(home, r'AppData\Roaming\Python\lib\site-packages\fugashi')
+
+    os.add_dll_directory(dll_path)
+    from fugashi import Tagger
+    
+    dicrc = os.path.join(dll_path, 'dicrc')
+    with open(dicrc, 'wb') as f:
+        f.write('\n'.join([
+            r'node-format-yomi = %f[9] ',
+            r'unk-format-yomi = %m',
+            r'eos-format-yomi  = \n',
+            ''
+        ]).encode('utf-8'))
+
+    wakati = Tagger('-Owakati')
+    yomi = Tagger('-Oyomi -r ' + dicrc.replace('\\', '\\\\'))
+
+    #import MeCab
+    #wakati = MeCab.Tagger('-Owakati')
+    HAVE_TOKENIZER = True
+    info('found mecab')
+except:
+    HAVE_TOKENIZER = False
+    import traceback
+
+    warn('could not load mecab:\n' + traceback.format_exc() + '-' * 72 + '\n')
 
 
 class TextStuff(object):
@@ -203,18 +270,6 @@ def assan(x):
 def main():
     t0_main = time.time()
 
-    if WINDOWS:
-        os.system("")
-
-    logging.basicConfig(
-        level=logging.INFO,  # INFO DEBUG
-        format="\033[36m%(asctime)s.%(msecs)03d\033[0m %(message)s",
-        datefmt="%H%M%S",
-    )
-    lh = logging.StreamHandler(sys.stderr)
-    lh.setFormatter(LoggerFmt())
-    logging.root.handlers = [lh]
-
     random.seed(b'nope')
 
     ap = argparse.ArgumentParser(
@@ -230,6 +285,10 @@ def main():
     ap.add_argument("--kana", action="store_true", help="convert kanji to kana")
     ap.add_argument("fn", metavar='JSON_FILE')
     ar = ap.parse_args()
+
+    if ar.kana and not HAVE_TOKENIZER:
+        error('you requested --kana but mecab failed to load')
+        sys.exit(1)
 
     if not ar.sz:
         ar.sz = 24 if ar.m == 1 else 32
@@ -273,7 +332,16 @@ def main():
 
         # transcription from kanji to kana if requested
         if ar.kana and is_jp and n_kanji:
-            txt = yomi.parse(txt)
+            txt2 = yomi.parse(txt)
+            txt = ''
+            for ch in txt2:
+                co = ord(ch)
+                # hiragana >= 0x3041 and <= 0x3096
+                # katakana >= 0x30a1 and <= 0x30f6
+                if co >= 0x30a1 and co <= 0x30f6:
+                    txt += chr(co - (0x30a1 - 0x3041))
+                else:
+                    txt += ch
 
         if ar.m == 1:
             wrap_width = bw
@@ -311,6 +379,8 @@ def main():
                         vtxt[n] = ln[m.end():]
 
                 vsz = z.vsize('\n'.join(vtxt))
+
+        vtxt = [x for x in vtxt if x.strip()]
 
         if n_msg % 100 == 0:
             info('  {} / {}   {}%   {}   {}\n   {}\n'.format(
@@ -532,7 +602,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                             
                             nfsz = y1 - fy1
                             if nfsz > h / 3.0:
-                                # h/3 to ensure less than 67% overlap
+                                # h/3 to ensure less than 33% overlap
                                 add.append([nfsz, fy1, y1])
 
                             nfsz = fy2 - y2
@@ -606,30 +676,43 @@ if __name__ == '__main__':
 
 
 r"""
+
+===[ side-by-side with kanji transcription ]===========================
+
 chat_replay_downloader.py https://www.youtube.com/watch?v=7LXgVlrfsWw -output ars-37-minecraft-3.json
 
-softchat.py ..\yt\ars-37-minecraft-3.json -b 320x550+64+75
+softchat.py ..\yt\ars-37-minecraft-3.json -b 340x500+32+32 && copy /y ..\yt\ars-37-minecraft-3.json.ass ..\yt\ars-37-minecraft-3.json.1.ass
 
-softchat.py ..\yt\ars-37-minecraft-3.json -b 320x450+64+75 && copy /y ..\yt\ars-37-minecraft-3.json.ass ..\yt\ars-37-minecraft-3.json.1.ass
-
-softchat.py ..\yt\ars-37-minecraft-3.json --kana -b 320x450+324+75 && copy /y ..\yt\ars-37-minecraft-3.json.ass ..\yt\ars-37-minecraft-3.json.2.ass
+softchat.py ..\yt\ars-37-minecraft-3.json -b 340x500+360+32 --kana && copy /y ..\yt\ars-37-minecraft-3.json.ass ..\yt\ars-37-minecraft-3.json.2.ass
 
 (head -n 21 ars-37-minecraft-3.json.1.ass ; (tail -n +22 ars-37-minecraft-3.json.1.ass; tail -n +22 ars-37-minecraft-3.json.2.ass) | sort) > ars-37-minecraft-3.json.ass
 
 c:\users\ed\bin\mpv.com "..\yt\ars-37-minecraft-3.json.mkv" -ss 1:15:20
 
------------------------------------------------------------------------
+
+===[ re-parse a downloaded youtube json ]==============================
 
 chat_replay_downloader.py https://www.youtube.com/watch?v=0Qygvs0rG50 -output ame-minecraft-railway-research.json
 chat_replay_downloader.py ame-minecraft-railway-research.json.json -output ame-minecraft-railway-research-2.json
 
-..\dev\softchat.py -m 2 "ame-minecraft-railway-research-2.json" && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --vf=fps=90 --sub-delay=-3 -ss 2
+
+===[ danmaku / nnd-style ]=============================================
+
+# assumes your mpv config is interpolation=no, blend-subtitles=no
+..\dev\softchat.py -m 2 "ame-minecraft-railway-research-2.json" && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --vf=fps=90 --sub-delay=-3
+
+# sanic
+--vo=direct3d --sub-delay=-3 --vf=fps=75 --speed=1.2
+
+# alternate display mode, usually worse
 C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --interpolation=yes --blend-subtitles=yes --video-sync=display-resample --tscale=mitchell --hwdec=off --vo=direct3d
-C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --vf=fps=90 --interpolation=no --blend-subtitles=no --sub-delay=-3 -ss 1:50:0
+
+# use --sub-files=some.ass to specify a sub with another name
+
+
+===[ junk ]============================================================
 
 ..\dev\softchat.py -m 1 -b 320x600+960+32 ame-minecraft-railway-research-2-2.json && C:\Users\ed\bin\mpv.com ame-minecraft-railway-research-2.json.mkv --vo=direct3d --sub-files=ame-minecraft-railway-research-2-2.json.ass --sub-delay=-3 -ss 120
-
------------------------------------------------------------------------
 
 cpy3: 15.46 sec @15k NOcache
 cpy3:  8.87 sec @15k 16k 24
