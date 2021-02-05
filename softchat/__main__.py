@@ -2,7 +2,7 @@
 
 about = {
     "name": "softchat",
-    "version": "0.12",
+    "version": "0.13",
     "date": "2020-11-16",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
@@ -102,9 +102,7 @@ tested on cpython 3.8.1
 
 ==[ NEW ]==============================================================
 
- - avoid some collisions in -m2, especially without --spread
- - added note on reconverting rips after upgrading
- - translation mapping for emotes
+ - fix collision preference
 
 ==[ TODO ]=============================================================
 
@@ -859,7 +857,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 ymax = vh - h
                 overlap_mul = 0.9
                 frees_merged = []  # crit + prefer
-                for lst in [taken_crit, taken_prefer]:
+                for lst in [taken_prefer, taken_crit]:
                     frees = [[ymax, 0, ymax]]  # size, y0, y1
                     for y1, y2, _, _, _ in sorted(lst):
                         rm = []
