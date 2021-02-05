@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.16",
-    "date": "2020-12-13",
+    "version": "0.17",
+    "date": "2021-01-06",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -102,8 +102,7 @@ tested on cpython 3.8.1
 
 ==[ NEW ]==============================================================
 
- - workaround youtube occasionally setting unix timestamps
-    in the relative-time field of the last message (nice)
+ - support macos
 
 ==[ TODO ]=============================================================
 
@@ -168,12 +167,23 @@ if __name__ == "__main__":
 
 
 try:
-    # help python find libmecab.dll, adjust this to fit your env,
-    # TODO make this fix less bad (linux/macos, python versions, sys/user)
-    home = os.path.expanduser("~")
-    dll_path = os.path.join(home, r"AppData\Roaming\Python\lib\site-packages\fugashi")
+    # help python find libmecab.dll, adjust this to fit your env if necessary
+    dll_path = None
+    for base in sys.path:
+        x = os.path.join(base, 'fugashi')
+        if os.path.exists(os.path.join(x, 'cli.py')) and not dll_path:
+            dll_path = x
+        x2 = os.path.join(x, "../../../lib/site-packages/fugashi")
+        if os.path.exists(x2):
+            dll_path = x2
+            break
+    
+    if not dll_path:
+        raise Exception('could not find fugashi installation path')
 
-    os.add_dll_directory(dll_path)
+    if WINDOWS:
+        os.add_dll_directory(dll_path)
+    
     from fugashi import Tagger
 
     dicrc = os.path.join(dll_path, "dicrc")
@@ -195,12 +205,12 @@ try:
     # import MeCab
     # wakati = MeCab.Tagger('-Owakati')
     HAVE_TOKENIZER = True
-    info("found mecab")
+    info("found fugashi")
 except:
     HAVE_TOKENIZER = False
     import traceback
 
-    warn("could not load mecab:\n" + traceback.format_exc() + "-" * 72 + "\n")
+    warn("could not load fugashi:\n" + traceback.format_exc() + "-" * 72 + "\n")
 
 
 class TextStuff(object):
