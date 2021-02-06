@@ -1,5 +1,5 @@
 # softchat
-* convert twitch/youtube chat into softsubs
+* convert twitch/youtube chat into softsubs ([webm](https://ocv.me/dev/softchat.webm))
 * supports windows, macos, linux
 * MIT-Licensed, 2020-10-12, ed @ irc.rizon.net
 
@@ -15,11 +15,11 @@
 
 * ...or do it manually like this:
 
-      python3 -m youtube_dl youtu.be/?4dlsbJiEa-U
-      python3 -m chat_downloader --message_groups all --sort_keys --indent 2 -o same-filename.json youtu.be/?4dlsbJiEa-U
+      python3 -m youtube_dl youtube.com/watch?v=4dlsbJiEa-U
+      python3 -m chat_downloader --message_groups all -o same-filename.json youtube.com/watch?v=4dlsbJiEa-U
       python3 -m softchat -m2 same-filename.json
 
-  the json filename should be whatever youtube-dl decides to use except with `.json` as the extension, and remember quotes depending on OS
+  the json filename should be whatever `youtube-dl` decides to use, except replace the extension with `.json` (and remember quotes depending on OS)
 
 * use `mpv` and resample the FPS to your monitor rate:
 
@@ -52,7 +52,7 @@
   replace 90 with your monitor's fps
 
 * after an upgrade, you can reconvert old rips like this:  
-  `grep -lE '^Title: .*softchat' -- *.ass | tr '\n' '\0' | xargs -0rtl ../dev/softchat.py -m2 --`
+  `grep -lE '^Title: .*softchat' -- *.ass | tr '\n' '\0' | xargs -0rtl python3 -m softchat -m2 --`
 
 * youtube VOD chatlogs are incomplete (about 80% of messages are lost)  
   so softchat can now take multiple chat JSONs to splice together:  
@@ -68,7 +68,6 @@
 
 * chatrips must be made using https://github.com/xenova/chat-downloader
   * softchat will be updated as the output format of chat-downloader changes
-  * older softchat versions assumed older chat-downloader versions, such as https://ocv.me/dev/?chat_replay_downloader.py for v0.14 and older
 
 * a copy of `NotoSansCJKjp-Regular.otf` in a folder named `noto-hinted`
   * download here: https://ocv.me/stuff/NotoSansCJKjp-Regular.otf

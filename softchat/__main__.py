@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.18",
-    "date": "2021-01-07",
+    "version": "0.19",
+    "date": "2021-02-06",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -25,105 +25,6 @@ import colorsys
 import subprocess as sp
 from datetime import datetime
 from PIL import ImageFont, ImageDraw, Image
-
-"""
-==[ NOTES / README ]===================================================
-
- - superchats will display for 2x the time and with inverted colors
-
- - moderator messages are emphasized
-     (larger outline, and prefixed with a ball)
-
- - mode 1, sidebar chat, creates a huge amount of subtitle events
-     which many media players (including mpv) will struggle with
-
-     for example, seeking will take like 5sec
-
-     you can fix this by muxing the subtitle into the vid:
-     ffmpeg -i the.webm -i the.ass -c copy muxed.mkv
-
- - mode 2, danmaku, will look blurry and/or jerky in most players
-     unless you have the subtitles render at your native screen res
-
-     for example in mpv you could add these arguments:
-     --vo=direct3d --sub-delay=-2 --vf=fps=90
-
-     replace 90 with your monitor's fps
-
- - after an upgrade, you can reconvert old rips like this:
-     grep -lE '^Title: .*softchat' -- *.ass | tr '\n' '\0' | xargs -0rtl ../dev/softchat.py -m2 --
-
- - youtube VOD chatlogs are incomplete (about 80% of messages are lost)
-     so softchat can now take multiple chat JSONs to splice together:
-     it is recommended to run chat_replay_downloader.py twice,
-     first when the stream is live and then afterwards for the VOD chat;
-     when running softchat, the VOD json should be the first file provided,
-     followed by any live recordings to splice messages from
-
-==[ DEPENDENCIES ]=====================================================
-each version below is the latest as of writing,
-tested on cpython 3.8.1
-
- - chat rips made using chat_replay_downloader.py;
-   latest-tested may at times have softchat-specific modifications
-   but upstream is likely more maintained and CURRENTLY RECOMMENDED:
-     latest-tested: https://ocv.me/dev/?chat_replay_downloader.py
-     upstream: https://github.com/xenova/chat-replay-downloader/blob/master/chat_replay_downloader.py
-
- - all the noto fonts in a subfolder called noto-hinted
-     see https://www.google.com/get/noto/
-     or just https://noto-website-2.storage.googleapis.com/pkgs/Noto-hinted.zip
-     (remove "un" from "unhinted" in the download link)
-
- - REQUIRED:
-   python -m pip install --user pillow
-
- - REQUIRED:
-   python -m pip install --user fontTools
-
- - OPTIONAL (not yet implemented here):
-   python -m pip install --user git+https://github.com/googlefonts/nototools.git@v0.2.13#egg=nototools
-
- - OPTIONAL (recommended):
-   python -m pip install --user "fugashi[unidic]"
-   python -m unidic download
-
- - OPTIONAL (this also works with some modifications):
-   python -m pip install --user mecab-python3
-   # bring your own dictionaries
-
-==[ HOW-TO / EXAMPLE ]=================================================
-
- 1 download the youtube video, for example with youtube-dl or
-   https://ocv.me/dev/?ytdl-tui.py
-
-   it will eventually say "Merging formats into some.mkv",
-   use that filename below except replace extension as necessary
- 
- 2 download the chatlog:
-   chat_replay_downloader.py https://youtu.be/fgsfds -message_type all -o "some.json"
-
- 3 convert the chatlog into subtitles (-m2=danmaku)
-   softchat.py -m2 "some.json"
-
- 4 play the video (with --vf=fps=$SCREEN_HZ to make danmaku smoother)
-   mpv some.mkv --sub-delay=-2 --vf=fps=60
-
-==[ NEW ]==============================================================
-
- - interleaving of multiple chat.json files to grab all messages
-
-==[ TODO ]=============================================================
-
- - build optimal font using noto-merge-fonts
- - per-line background shading (optional)
- - more stuff probably
-
-==[ RELATED ]==========================================================
-
- - https://ocv.me/dev/?gist/chat-heatmap.py
-
-"""
 
 
 try:
