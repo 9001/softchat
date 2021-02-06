@@ -20,6 +20,7 @@ import random
 import pprint
 import logging
 import argparse
+import tempfile
 import colorsys
 import subprocess as sp
 from datetime import datetime
@@ -222,13 +223,25 @@ except:
 
 
 class TextStuff(object):
-    def __init__(self, sz):
+    def __init__(self, sz, fontdir):
         self.sz = sz
-        self.otf_src = self.resolve_path("noto-hinted/NotoSansCJKjp-Regular.otf")
-        self.otf_mod = self.resolve_path(
-            "noto-hinted/SquishedNotoSansCJKjp-Regular.otf"
-        )
-        if not os.path.exists(self.otf_mod):
+
+        if fontdir:
+            fontdir = fontdir.rstrip(os.sep)
+            if fontdir.endswith("noto-hinted"):
+                fontdir = fontdir.rsplit(os.sep, 1)[0]
+
+        src = os.path.join("noto-hinted", "NotoSansCJKjp-Regular.otf")
+        ok, self.otf_src = self.resolve_path(src, fontdir)
+        if not ok:
+            err = "could not locate fonts after trying these locations:"
+            raise Exception("\n  ".join([err] + self.otf_src))
+
+        dst = os.path.join("noto-hinted", "SquishedNotoSansCJKjp-Regular.otf")
+        ok, self.otf_mod = self.resolve_path(dst, fontdir, self.otf_src)
+        if ok:
+            info(f"found font: {self.otf_mod}")
+        else:
             self.conv_otf()
 
         # mpv=870 pil=960 mul=0.9 (due to fontsquish?)
@@ -240,16 +253,41 @@ class TextStuff(object):
         self.cache = {}
         self.vsize = self.caching_vsize
 
-    def resolve_path(self, path):
-        return os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
+    def resolve_path(self, path, suggested, refpath=None):
+        # wow really didn't think this through
+        home = os.path.expanduser("~")
+        basedirs = [
+            os.path.dirname(os.path.realpath(__file__)),
+            os.getcwd(),
+            home,
+            os.path.join(home, "fonts"),
+            os.path.join(home, ".fonts"),
+            os.path.join(home, "Downloads"),
+            tempfile.gettempdir(),
+        ]
+
+        if suggested:
+            basedirs = [suggested] + basedirs
+
+        ret = [os.path.join(x, path) for x in basedirs]
+
+        if refpath:
+            # prefer same directory as the other file
+            for x in ret:
+                if x.rsplit(os.sep, 1)[0] == refpath.rsplit(os.sep, 1)[0]:
+                    ret = [x] + [y for y in ret if y != x]
+                    break
+
+        for fp in ret:
+            try:
+                if os.path.exists(fp):
+                    return True, fp
+            except:
+                pass
+
+        return False, ret
 
     def conv_otf(self):
-        # import fontline.commands as flc
-        #
-        # flc.modify_linegap_percent(self.otf_src, "30")
-        # x = flc.get_linegap_percent_filepath(self.otf_src, "30")
-        # os.rename(x, self.otf_mod)
-
         from fontTools.ttLib import TTFont, newTable
 
         info("creating squished font, pls wait")
@@ -281,6 +319,23 @@ class TextStuff(object):
         except:
             pass
 
+        for fp in self.otf_mod:
+            try:
+                fdir = fp.rsplit(os.sep, 1)[0]
+                os.makedirs(fdir, exist_ok=True)
+                with open(fp, "wb") as f:
+                    f.write(b"h")
+
+                os.unlink(fp)
+                break
+            except:
+                fp = None
+
+        if not fp:
+            err = "could not write modified font to any of the following locations:"
+            raise Exception("\n  ".join([err] + self.otf_mod))
+
+        self.otf_mod = fp
         info(f"writing {self.otf_mod}")
         font.save(self.otf_mod)
 
@@ -400,9 +455,7 @@ def get_ff_dur(fn):
 def convert_old(m):
     o = {
         "action_type": "add_chat_item",
-        "author": {
-            "id": m["author_id"],
-        },
+        "author": {"id": m["author_id"]},
         "message": m["message"],
         "timestamp": m["timestamp"],
     }
@@ -467,6 +520,7 @@ def main():
     ap.add_argument("--spd", metavar="SPEED", type=int, default=256, help="[danmaku] pixels/sec")
     ap.add_argument("--spread", action="store_true", help="[danmaku] even distribution")
     ap.add_argument("--kana", action="store_true", help="convert kanji to kana")
+    ap.add_argument("--fontdir", metavar="DIR", type=str, default=None, help="path to noto-hinted")
     ap.add_argument("fn", metavar="JSON_FILE", nargs="+")
     ar = ap.parse_args()
     # fmt: on
@@ -485,7 +539,7 @@ def main():
         int(x) for x in re.split(r"[x,+]+", ar.b if ar.b else ar.r + "+0+0")
     ]
 
-    z = TextStuff(ar.sz)
+    z = TextStuff(ar.sz, ar.fontdir)
     fofs = z.font_ofs
 
     jd = []
