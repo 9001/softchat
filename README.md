@@ -19,9 +19,10 @@
       python3 -m chat_downloader --message_groups all --sort_keys --indent 2 -o same-filename.json youtu.be/?4dlsbJiEa-U
       python3 -m softchat -m2 same-filename.json
 
-  the json filename should be whatever youtube_dl decides except with `.json` as the extension, and remember quotes depending on OS
+  the json filename should be whatever youtube-dl decides to use except with `.json` as the extension, and remember quotes depending on OS
 
 * use `mpv` and resample the FPS to your monitor rate:
+
       mpv some.mkv --sub-delay=-2 --vf=fps=60
   
   you *may* need to `--vo=direct3d` and *not* fullscreen for resampling to work (see `--vo=help` for more ideas ymmv)
@@ -77,6 +78,7 @@
 * required python libraries: `Pillow fontTools`
 
 * enable `--kana` (convert kanji to hiragana) with these:
+
       python3 -m pip install --user fugashi[unidic]
       python3 -m unidic download
 

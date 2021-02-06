@@ -304,7 +304,7 @@ class TextStuff(object):
         copied from  http://xxyxyz.org/line-breaking/
         license clarified per email:
           BSD or MIT since the EU doesn't recognize Public Domain
-        
+
         only change so far is replacing len(w) with vsize(w+"_")[0]
         """
         words = text.split()
@@ -396,7 +396,9 @@ def get_ff_dur(fn):
     return float(ret)
 
 
-class Okay(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
+class Okay(
+    argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter
+):
     pass
 
 
@@ -417,13 +419,14 @@ def main():
     }
 
     vips = [
-        "UCkIccKaHDGA8lYVmUerLhag"
+        "UCkIccKaHDGA8lYVmUerLhag",
+        "UCI1KCp4Wa3dGfcmxgik1mCw",
     ]
 
     ap = argparse.ArgumentParser(
         formatter_class=Okay,
         description="convert modified chat_replay_downloader.py json into box-confined or danmaku-style softsubs",
-        epilog="notes:\n  The first JSON_FILE should be the VOD download,\n  followed by any live-captures (to supplement\n  the messages which are lost in the VOD chat)"
+        epilog="notes:\n  The first JSON_FILE should be the VOD download,\n  followed by any live-captures (to supplement\n  the messages which are lost in the VOD chat)",
     )
 
     # fmt: off
@@ -462,45 +465,48 @@ def main():
         info(f"loading {fn}")
         with open(fn, "r", encoding="utf-8") as f:
             jd2 = json.load(f)
+            jd2 = [x for x in jd2 if x.get("action_type", None) == "add_chat_item"]
+            jd2 = [x for x in jd2 if x.get("author", {}).get("id", None) is not None]
             for m in jd2:
-                key = f"{m['timestamp']}\n{m['author_id']}"
+                key = f"{m['timestamp']}\n{m['author']['id']}"
                 if key not in seen:
                     seen.add(key)
                     jd.append(m)
+
+    use_018 = "; please use softchat v0.18 or older if your chat json was created with a chat_replay_downloader from before 2021-01-29-something"
+    use_017 = "; please use softchat v0.17 or older if your chat json was created with a really old chat_replay_downloader"
+    if not jd:
+        raise Exception("no messages were loaded" + use_018)
 
     # jd.sort(key=operator.attrgetter("timestamp"))
     jd.sort(key=lambda x: x["timestamp"])
     unix_ofs = None
     for x in jd:
         unix = x["timestamp"] / 1_000_000.0
-        t = x.get("video_offset_time_msec", 0)
-        if t >= 10_000:
-            video = t / 1000.0
+        t = x.get("time_in_seconds", 0)
+        if t >= 10:
+            video = t
             unix_ofs = unix - video
             break
 
     if unix_ofs is None:
-        raise Exception(
-            "could not find video_offset_time_msec in json, please use softchat v0.17 or older if your chat json was created with a really old chat_replay_downloader"
-        )
+        raise Exception("could not find time_in_seconds in json" + use_017)
 
     debug(f"unixtime offset = {unix_ofs:.3f}")
     debug("adding video offset to all messages")
     n_interp = 0
     for x in jd:
         unix = x["timestamp"] / 1_000_000.0
-        t = x.get("video_offset_time_msec", None)
+        t = x.get("time_in_seconds", None)
         if t is None:
             n_interp += 1
             sec = unix - unix_ofs
             isec = int(sec)
-            x["video_offset_time_msec"] = 1000 * sec
+            x["time_in_seconds"] = sec
             x["time_text"] = f"{isec // 60}:{isec % 60:02d}"
-            x["time_in_seconds"] = isec
-        elif t >= 10_000 and "amount" not in x:
-            video = t / 1000.0
+        elif t >= 10 and "amount" not in x:
+            video = t
             new_ofs = unix - video
-            # print(f"{unix:.3f}, {video:.3f}, {x['time_text']}, {x['time_in_seconds']}")
             diff = abs(new_ofs - unix_ofs)
             if diff >= 10:
                 print(repr(x))
@@ -512,14 +518,19 @@ def main():
 
             unix_ofs = new_ofs
 
-    jd.sort(key=lambda x: [x["video_offset_time_msec"], x["author_id"]])
+    jd.sort(key=lambda x: [x["time_in_seconds"], x["author"]["id"]])
     info("{} msgs total, {} amended".format(len(jd), n_interp))
 
     # find all dupe msgs from [author-id, message-text]
     dupes = {}
     seen = set()
     for m in jd:
-        key = f"{m['author_id']}\n{m['message']}"
+        try:
+            mtxt = m.get("message", "--") or "--"
+            key = f"{m['author']['id']}\n{mtxt}"
+        except:
+            raise Exception(pprint.pformat(m))
+
         if key not in seen:
             seen.add(key)
             continue
@@ -536,7 +547,7 @@ def main():
         vf = []
         for m1, m2 in zip(v, v[1:]):
             if m2["timestamp"] - m1["timestamp"] < 10_000_000:
-                droplist.add(f"{m['timestamp']}\n{m['author_id']}")
+                droplist.add(f"{m['timestamp']}\n{m['author']['id']}")
                 for m in [m1, m2]:
                     if m not in vf:
                         vf.append(m)
@@ -553,7 +564,7 @@ def main():
 
     jd2 = []
     for m in jd:
-        key = f"{m['timestamp']}\n{m['author_id']}"
+        key = f"{m['timestamp']}\n{m['author']['id']}"
         if key not in droplist:
             jd2.append(m)
 
@@ -609,13 +620,13 @@ def main():
     for msg in jd:
         # break  # opt
 
-        uid = msg["author_id"]
+        uid = msg["author"]["id"]
         try:
-            nick = msg["author"]
+            nick = msg["author"]["name"]
         except:
             # warn(repr(msg))
             # raise
-            msg["author"] = nick = uid
+            msg["author"]["name"] = nick = uid
 
         # in case names change mid-stream
         pair = f"{nick}\n{uid}"
@@ -632,9 +643,6 @@ def main():
         except:
             nick_list[nick] = [uid]
 
-        # if nick == "McDoogle":
-        #    print(f"{nick} {uid} {msg['message']}")
-
     info(f"tagged {len(nick_dupes)} dupes:")
     for k, v in sorted(nick_list.items(), key=lambda x: [-len(x[1]), x[0]])[:20]:
         info(f"  {len(v)}x {k}")
@@ -643,22 +651,16 @@ def main():
     info(f"converting")
     last_msg = None
     for n_msg, msg in enumerate(jd):
-        txt = msg["message"] or "--"
-        cmp_msg = f"{msg['author_id']}\n{txt}"
+        txt = msg.get("message", "--") or "--"
+        cmp_msg = f"{msg['author']['id']}\n{txt}"
         if last_msg == cmp_msg:
             continue
 
         last_msg = cmp_msg
 
-        try:
-            t_fsec = msg["video_offset_time_msec"] / 1000.0
-            t_isec = msg["time_in_seconds"]
-            t_hms = msg["time_text"]
-        except:
-            # rip was made using a chat_replay_downloader.py from before 2020-11-01
-            t_fsec = msg["time_in_seconds"]
-            t_hms = msg["time_text"].split(".")[0]
-            t_isec = int(t_fsec)
+        t_fsec = msg["time_in_seconds"]
+        t_isec = int(t_fsec)
+        t_hms = msg["time_text"]
 
         if t_hms.startswith("-") or t_isec < 0 or t_isec > 4096 * 4096:
             continue
@@ -673,7 +675,7 @@ def main():
 
         if int(t_fsec) != t_isec or t_isec != t_isec2:
             # at some point, someone observed a difference between time_text
-            # and video_offset_time_msec, so please let me have a look at
+            # and time_in_seconds, so please let me have a look at
             # your chatlog json if you end up here
             raise Exception(
                 f"time drift [{t_fsec}] [{t_isec}] [{t_isec2}] [{t_hms}]\n  (pls provide this chat-rip to ed)"
@@ -758,13 +760,13 @@ def main():
                 )
             )
 
-        nick = msg["author"]
+        nick = msg["author"]["name"]
         if nick in nick_dupes:
-            nick += f"  ({msg['author_id']})"
+            nick += f"  ({msg['author']['id']})"
 
         o = {
             "nick": nick,
-            "uid": msg["author_id"],
+            "uid": msg["author"]["id"],
             "t0": t_fsec,
             "sx": sx,
             "sy": sy,
@@ -773,7 +775,16 @@ def main():
 
         if "amount" in msg:
             o["shrimp"] = msg["amount"]
-            o["color"] = msg["body_color"]["hex"][1:][:-2]  # "#1de9b6ff"
+            color = None
+            for k in [
+                "body_background_colour",
+                "background_colour",
+                "money_chip_background_colour",
+            ]:
+                if k in msg:
+                    color = msg[k]
+                    break
+            o["color"] = color[1:][:-2] or "444444"  # "#1de9b6ff"
 
         if "badges" in msg:
             o["badges"] = msg["badges"]
