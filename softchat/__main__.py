@@ -17,6 +17,7 @@ import time
 import json
 import zlib
 import random
+import pprint
 import logging
 import argparse
 import colorsys
@@ -494,6 +495,10 @@ def main():
 
     debug(f"unixtime offset = {unix_ofs:.3f}")
     debug("adding video offset to all messages")
+    # Store messages with no video offset in a temporary list
+    # The messages may have been sent while the stream was offline
+    tjd = list()
+    njd = list()
     n_interp = 0
     for x in jd:
         unix = x["timestamp"] / 1_000_000.0
@@ -504,7 +509,9 @@ def main():
             isec = int(sec)
             x["time_in_seconds"] = sec
             x["time_text"] = f"{isec // 60}:{isec % 60:02d}"
+            tjd.append(x)
         elif t >= 10 and "amount" not in x:
+            njd.append(x)
             video = t
             new_ofs = unix - video
             diff = abs(new_ofs - unix_ofs)
@@ -512,11 +519,26 @@ def main():
                 print(repr(x))
                 m = f"unix/video offset was {unix_ofs:.3f}, new {new_ofs:.3f} at {unix:.3f} and {video:.3f}, diff {new_ofs - unix_ofs:.3f}"
                 if diff >= 60:
-                    raise Exception(m)
+                    # Assume stream was offline when the gap is greater than a minute
+                    tjd.clear()
 
-                warn(m + ", probably fine")
+                    m += ", dropping messages while stream was assumed to be offline"
+                    warn(m)
+                else:
+                    warn(m + ", probably fine")
 
             unix_ofs = new_ofs
+            if tjd:
+                njd.extend(tjd)
+                tjd.clear()
+        else:
+            njd.append(x)
+
+    if tjd:
+        njd.extend(tjd)
+        tjd.clear()
+
+    jd = njd
 
     jd.sort(key=lambda x: [x["time_in_seconds"], x["author"]["id"]])
     info("{} msgs total, {} amended".format(len(jd), n_interp))
