@@ -397,6 +397,34 @@ def get_ff_dur(fn):
     return float(ret)
 
 
+def convert_old(m):
+    o = {
+        "action_type": "add_chat_item",
+        "author": {
+            "id": m["author_id"],
+        },
+        "message": m["message"],
+        "timestamp": m["timestamp"],
+    }
+
+    if m.get("author", None) is not None:
+        o["author"]["name"] = m["author"]
+
+    if m.get("amount", None) is not None:
+        o["amount"] = m["amount"]
+        o["body_background_colour"] = m["body_color"]["hex"]
+
+    if m.get("time_text", None) is not None:
+        o["time_text"] = m["time_text"]
+        o["time_in_seconds"] = m["video_offset_time_msec"] / 1000.0
+
+    if "badges" in m:
+        o["author"]["badges"] = [{"title": b} for b in m["badges"].split(", ")]
+        print(m)
+
+    return o
+
+
 class Okay(
     argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter
 ):
@@ -466,8 +494,14 @@ def main():
         info(f"loading {fn}")
         with open(fn, "r", encoding="utf-8") as f:
             jd2 = json.load(f)
+            if len(jd2) > 0 and jd2[0].get("author_id", None) is not None:
+                info(f"Converting legacy chat json {fn} to new format")
+                jd2 = [convert_old(x) for x in jd2]
             jd2 = [x for x in jd2 if x.get("action_type", None) == "add_chat_item"]
             jd2 = [x for x in jd2 if x.get("author", {}).get("id", None) is not None]
+            jd2 = [
+                x for x in jd2 if x.get("message", False) is not False or "amount" in x
+            ]
             for m in jd2:
                 key = f"{m['timestamp']}\n{m['author']['id']}"
                 if key not in seen:
@@ -808,8 +842,8 @@ def main():
                     break
             o["color"] = color[1:][:-2] or "444444"  # "#1de9b6ff"
 
-        if "badges" in msg:
-            o["badges"] = msg["badges"]
+        if "badges" in msg["author"]:
+            o["badges"] = [b["title"] for b in msg["author"]["badges"]]
 
         msgs.append(o)
 
