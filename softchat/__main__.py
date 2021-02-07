@@ -400,7 +400,47 @@ def main():
         ":_tea2:": "🅔",
         ":_tea3:": "🅐",
         ":_nou:": "🅄",
-        ":_yyy:": "🅈",
+        ":_aaa:": "🅰",
+        ":_bbb:": "🅱",
+        ":_ccc:": "🅲",
+        ":_ddd:": "🅳",
+        ":_eee:": "🅴",
+        ":_fff:": "🅵",
+        ":_ggg:": "🅶",
+        ":_hhh:": "🅷",
+        ":_iii:": "🅸",
+        ":_jjj:": "🅹",
+        ":_kkk:": "🅺",
+        ":_lll:": "🅻",
+        ":_mmm:": "🅼",
+        ":_nnn:": "🅽",
+        ":_ooo:": "🅾",
+        ":_ppp:": "🅿",
+        ":_qqq:": "🆀",
+        ":_rrr:": "🆁",
+        ":_sss:": "🆂",
+        ":_ttt:": "🆃",
+        ":_uuu:": "🆄",
+        ":_vvv:": "🆅",
+        ":_www:": "🆆",
+        ":_xxx:": "🆇",
+        ":_yyy:": "🆈",
+        ":_zzz:": "🆉",
+        ":_dragon:": "🐉",
+        ":_wowow:": "🇼",
+        ":_splash:": "😓",
+        ":_lol:": "😆",
+        ":_nani:": "😲",
+        ":_chungus:": "😕",
+        ":_kusa:": "草",
+        ":_rainbow:": "🌈",
+        ":_udekumi:": "😮",
+        ":_gata:": "ｶﾞﾀ",
+        ":_matsu:": "まつのこ",
+        ":_gebokawa": "げぼかわ",
+        ":_shot:": "💉",
+        ":_kuso:": "ｸｿ",
+        ":_mogu:": "😋",
     }
 
     vips = [
@@ -546,6 +586,7 @@ def main():
     info("{} msgs total, {} amended".format(len(jd), n_interp))
 
     # Process deletions from while the stream was live
+    # TODO -- consider processing undeletions as well (messages present in VOD after being "deleted" while live)
     ljd = len(jd)
 
     jd = [m for m in jd if m["message_id"] not in deleted_messages]
@@ -701,8 +742,9 @@ def main():
                 f"time drift [{t_fsec}] [{t_isec}] [{t_isec2}] [{t_hms}]\n  (pls provide this chat-rip to ed)"
             )
 
-        for k, v in emotes.items():
-            txt = txt.replace(k, v)
+        if ":" in txt:
+            for k, v in emotes.items():
+                txt = txt.replace(k, v)
 
         n_ascii = len(ptn_ascii.findall(txt))
         n_kanji = len(ptn_kanji.findall(txt))
