@@ -494,8 +494,33 @@ def main():
     for fn in ar.fn:
         info(f"loading {fn}")
         with open(fn, "r", encoding="utf-8") as f:
-            jd2 = json.load(f)
-            if len(jd2) > 0 and jd2[0].get("author_id", None) is not None:
+            err = None
+            try:
+                jd2 = json.load(f)
+            except Exception as ex:
+                err = repr(ex)
+
+            if not err and not jd2:
+                err = "empty json file?"
+
+            if not err:
+                try:
+                    if jd2.get("formats"):
+                        err = "this is a youtube-dl info file, not a chatlog"
+                except:
+                    pass
+
+            if not err:
+                try:
+                    _ = jd2[0]["timestamp"]
+                except:
+                    err = "does not look like a chatlog"
+
+            if err:
+                error(f"failed: {err}")
+                sys.exit(1)
+
+            if jd2[0].get("author_id", None):
                 info(f"Converting legacy chat json {fn} to new format")
                 jd2 = [convert_old(x) for x in jd2]
 
