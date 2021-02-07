@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "0.19",
-    "date": "2021-02-06",
+    "version": "0.20",
+    "date": "2021-02-07",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -709,7 +709,7 @@ def main():
         info(f"  {len(v)}x {k}")
 
     msgs = []
-    info(f"converting")
+    info("converting")
     last_msg = None
     for n_msg, msg in enumerate(jd):
         txt = msg.get("message", "--") or "--"
@@ -773,12 +773,12 @@ def main():
             # vsfilter wraps it anyways orz
             wrap_width = vw / 2
 
-        # if n_msg % 100 == 0 and len(z.cache) > 1024 * 1024:
-        #    z.cache = {}
+        if n_msg % 100 == 0 and len(z.cache) > 1024 * 64:
+            z.cache = {}
 
         # wrap to specified width
         # by splitting on ascii whitespace
-        vtxt = z.unrag(txt, bw)
+        vtxt = z.unrag(txt, wrap_width)
         vsz = z.vsize("\n".join(vtxt))
 
         if vsz[0] >= bw and is_jp:
@@ -947,9 +947,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
                 badges = msg.get("badges", [])
                 if not set(badges).isdisjoint(["Moderator", "Owner", "Verified"]):
-                    txt[-1] += rf" {{\bord16\shad6}}*"
+                    txt[-1] += r" {\bord16\shad6}*"
                 elif msg["uid"] in vips:
-                    txt[-1] += rf" {{\bord16\shad4}}----"
+                    txt[-1] += r" {\bord16\shad4}----"
 
                 if shrimp:
                     txt.append(shrimp)
