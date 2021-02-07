@@ -583,10 +583,15 @@ def main():
 
     media_fn = None
     for ext in ["webm", "mp4", "mkv"]:
-        f = ar.fn[0].rsplit(".", 1)[0] + "." + ext
-        if os.path.exists(f):
-            media_fn = f
+        if media_fn:
             break
+        f = ar.fn[0]
+        while "." in f:
+            f = f.rsplit(".", 1)[0]
+            mfn = f + "." + ext
+            if os.path.exists(mfn):
+                media_fn = mfn
+                break
 
     cdur_msg = None
     cdur_err = "could not verify chat duration"
