@@ -447,6 +447,8 @@ def main():
     fofs = z.font_ofs
 
     jd = []
+    deleted_messages = set()
+    deleted_authors = set()
     seen = set()
     for fn in ar.fn:
         info(f"loading {fn}")
@@ -455,12 +457,19 @@ def main():
             if len(jd2) > 0 and jd2[0].get("author_id", None) is not None:
                 info(f"Converting legacy chat json {fn} to new format")
                 jd2 = [convert_old(x) for x in jd2]
-            jd2 = [x for x in jd2 if x.get("action_type", None) == "add_chat_item"]
-            jd2 = [x for x in jd2 if x.get("author", {}).get("id", None) is not None]
-            jd2 = [
-                x for x in jd2 if x.get("message", False) is not False or "amount" in x
-            ]
+
             for m in jd2:
+                at = m.get("action_type", None)
+                if at == "mark_chat_item_as_deleted":
+                    deleted_messages.add(m["target_message_id"])
+                elif at == "mark_chat_items_by_author_as_deleted":
+                    deleted_authors.add(m["author"]["id"])
+
+                if (at != "add_chat_item"
+                        or m.get("author", {}).get("id", None) is None
+                        or (m.get("message", False) is False and "amount" not in m)):
+                    continue
+
                 # Must use a composite ID here so that legacy json can be used with new json
                 key = f"{m['timestamp']}\n{m['author']['id']}"
                 if key not in seen:
@@ -536,7 +545,16 @@ def main():
     jd.sort(key=lambda x: [x["time_in_seconds"], x["author"]["id"]])
     info("{} msgs total, {} amended".format(len(jd), n_interp))
 
-    # find all dupe msgs from [author-id, message-text]
+    # Process deletions from while the stream was live
+    ljd = len(jd)
+
+    jd = [m for m in jd if m["message_id"] not in deleted_messages]
+    jd = [m for m in jd if m["author"]["id"] not in deleted_authors]
+
+    if len(jd) != ljd:
+        info(f"Dropped {ljd - len(jd)} deleted messages.")
+
+    # Find all dupe msgs from [author-id, message-text]
     dupes = {}
     for m in jd:
         try:
@@ -562,6 +580,9 @@ def main():
                 # Keep chains of dupes from extending indefinitely
                 m = m2
 
+
+    if len(droplist) > 0:
+        info(f"Dropping {len(droplist)} duplicate chat entries within threshold")
     jd = [m for m in jd if m["message_id"] not in droplist]
 
     media_fn = None
