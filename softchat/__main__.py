@@ -358,6 +358,9 @@ def convert_old(m):
         "action_type": "add_chat_item",
         "author": {"id": m["author_id"]},
         "message": m["message"],
+        # This should be enough to uniquely identify them
+        # As long as dumps from the new API are processed before legacy json files the proper IDs will be used.
+        "message_id": f"{m['author_id']}{m['timestamp']}",
         "timestamp": m["timestamp"],
     }
 
@@ -374,7 +377,6 @@ def convert_old(m):
 
     if "badges" in m:
         o["author"]["badges"] = [{"title": b} for b in m["badges"].split(", ")]
-        print(m)
 
     return o
 
@@ -422,6 +424,7 @@ def main():
     ap.add_argument("--spread", action="store_true", help="[danmaku] even distribution")
     ap.add_argument("--kana", action="store_true", help="convert kanji to kana")
     ap.add_argument("--fontdir", metavar="DIR", type=str, default=None, help="path to noto-hinted")
+    ap.add_argument("--dupe_threshold", metavar="DUPE_THRESH", type=float, default=10, help="Hide duplicate messages from the same author within this many seconds")
     ap.add_argument("fn", metavar="JSON_FILE", nargs="+")
     ar = ap.parse_args()
     # fmt: on
@@ -458,6 +461,7 @@ def main():
                 x for x in jd2 if x.get("message", False) is not False or "amount" in x
             ]
             for m in jd2:
+                # Must use a composite ID here so that legacy json can be used with new json
                 key = f"{m['timestamp']}\n{m['author']['id']}"
                 if key not in seen:
                     seen.add(key)
@@ -534,7 +538,6 @@ def main():
 
     # find all dupe msgs from [author-id, message-text]
     dupes = {}
-    seen = set()
     for m in jd:
         try:
             mtxt = m.get("message", "--") or "--"
@@ -542,44 +545,24 @@ def main():
         except:
             raise Exception(pprint.pformat(m))
 
-        if key not in seen:
-            seen.add(key)
-            continue
-
         try:
             dupes[key].append(m)
         except:
             dupes[key] = [m]
 
-    # filter to messages that are closer than 10sec
+    # filter messages so that no remaining dupes are closer together than dupe_threshold seconds
     dupes2 = {}
     droplist = set()
     for k, v in dupes.items():
-        vf = []
-        for m1, m2 in zip(v, v[1:]):
-            if m2["timestamp"] - m1["timestamp"] < 10_000_000:
-                droplist.add(f"{m['timestamp']}\n{m['author']['id']}")
-                for m in [m1, m2]:
-                    if m not in vf:
-                        vf.append(m)
-        if vf:
-            dupes2[k] = vf
+        m = v[0]
+        for m2 in v[1:]:
+            if m2["timestamp"] - m["timestamp"] < 1_000_000 * ar.dupe_threshold:
+                droplist.add(m2["message_id"])
+            else:
+                # Keep chains of dupes from extending indefinitely
+                m = m2
 
-    dupes = dupes2
-
-    if False:
-        for k, v in sorted(dupes.items(), key=lambda x: [-len(x[1]), x[0]])[:100]:
-            # warn("msg dupe:")
-            for v2 in v:
-                warn(repr(v2))
-
-    jd2 = []
-    for m in jd:
-        key = f"{m['timestamp']}\n{m['author']['id']}"
-        if key not in droplist:
-            jd2.append(m)
-
-    jd = jd2
+    jd = [m for m in jd if m["message_id"] not in droplist]
 
     media_fn = None
     for ext in ["webm", "mp4", "mkv"]:
