@@ -21,14 +21,25 @@
 
   the json filename should be whatever `youtube-dl` decides to use, except replace the extension with `.json` (and remember quotes depending on OS)
 
-* use `mpv` and resample the FPS to your monitor rate:
 
-      mpv some.mkv --sub-delay=-2 --vf=fps=60
-  
-  you *may* need to `--vo=direct3d` and *not* fullscreen for resampling to work (see `--vo=help` for more ideas ymmv)
+# advice
+
+`mpv` is the recommended player, however in danmaku mode, you should resample the video to your monitor's FPS.
+* one way to do this: adding the argument `--vf=fps=120` every time
+* another way is adding the following line to `input.conf`, which lets you press shift-U to toggle upscaling to 120 fps:
+  ```
+  U vf toggle fps=120
+  ```
+* on linux/mac, `input.conf` should be here: `~/.config/mpv/input.conf`
+* on windows, `input.conf` should be here: `%appdata%\mpv\input.conf`
+
+additionally, on windows you *may* need to `--vo=direct3d` and *not* fullscreen for resampling to work -- try the different alternatives in `--vo=help` and find one which:
+1. doesn't ruin the contrast
+2. doesn't make the text blurry
+3. doesn't make the text jitter
 
 
-# notes
+# about
 
 * superchats will display for 2x the time and with inverted colors
 
