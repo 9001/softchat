@@ -464,7 +464,8 @@ def main():
     ap.add_argument("--spread", action="store_true", help="[danmaku] even distribution")
     ap.add_argument("--kana", action="store_true", help="convert kanji to kana")
     ap.add_argument("--fontdir", metavar="DIR", type=str, default=None, help="path to noto-hinted")
-    ap.add_argument("--dupe_threshold", metavar="DUPE_THRESH", type=float, default=10, help="Hide duplicate messages from the same author within this many seconds")
+    ap.add_argument("--dupe_thr", metavar="SEC", type=float, default=10, help="Hide duplicate messages from the same author within this many seconds")
+    ap.add_argument("--no_del", action="store_true", help="keep msgs deleted by mods")
     ap.add_argument("fn", metavar="JSON_FILE", nargs="+")
     ar = ap.parse_args()
     # fmt: on
@@ -505,9 +506,11 @@ def main():
                 elif at == "mark_chat_items_by_author_as_deleted":
                     deleted_authors.add(m["author"]["id"])
 
-                if (at != "add_chat_item"
-                        or m.get("author", {}).get("id", None) is None
-                        or (m.get("message", False) is False and "amount" not in m)):
+                if (
+                    at != "add_chat_item"
+                    or m.get("author", {}).get("id", None) is None
+                    or (m.get("message", False) is False and "amount" not in m)
+                ):
                     continue
 
                 # Must use a composite ID here so that legacy json can be used with new json
@@ -589,8 +592,9 @@ def main():
     # TODO -- consider processing undeletions as well (messages present in VOD after being "deleted" while live)
     ljd = len(jd)
 
-    jd = [m for m in jd if m["message_id"] not in deleted_messages]
-    jd = [m for m in jd if m["author"]["id"] not in deleted_authors]
+    if not ar.no_del:
+        jd = [m for m in jd if m["message_id"] not in deleted_messages]
+        jd = [m for m in jd if m["author"]["id"] not in deleted_authors]
 
     if len(jd) != ljd:
         info(f"Dropped {ljd - len(jd)} deleted messages.")
@@ -609,18 +613,16 @@ def main():
         except:
             dupes[key] = [m]
 
-    # filter messages so that no remaining dupes are closer together than dupe_threshold seconds
-    dupes2 = {}
+    # filter messages so that no remaining dupes are closer together than dupe_thr seconds
     droplist = set()
     for k, v in dupes.items():
         m = v[0]
         for m2 in v[1:]:
-            if m2["timestamp"] - m["timestamp"] < 1_000_000 * ar.dupe_threshold:
+            if m2["timestamp"] - m["timestamp"] < 1_000_000 * ar.dupe_thr:
                 droplist.add(m2["message_id"])
             else:
                 # Keep chains of dupes from extending indefinitely
                 m = m2
-
 
     if len(droplist) > 0:
         info(f"Dropping {len(droplist)} duplicate chat entries within threshold")
@@ -628,10 +630,8 @@ def main():
 
     media_fn = None
     for ext in ["webm", "mp4", "mkv"]:
-        if media_fn:
-            break
         f = ar.fn[0]
-        while "." in f:
+        while not media_fn and "." in f:
             f = f.rsplit(".", 1)[0]
             mfn = f + "." + ext
             if os.path.exists(mfn):
