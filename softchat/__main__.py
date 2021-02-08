@@ -735,14 +735,10 @@ def main():
 
     msgs = []
     info("converting")
-    last_msg = None
     for n_msg, msg in enumerate(jd):
-        txt = msg.get("message", "--") or "--"
-        cmp_msg = f"{msg['author']['id']}\n{txt}"
-        if last_msg == cmp_msg:
-            continue
-
-        last_msg = cmp_msg
+        txt = msg.get("message", "") or ""
+        if "amount" not in msg and txt == "":
+            txt = "--"
 
         t_fsec = msg["time_in_seconds"]
         t_isec = int(t_fsec)
