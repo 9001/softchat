@@ -299,6 +299,15 @@ def hms(s):
     m, s = divmod(s, 60)
     return "{:d}:{:02d}:{:05.2f}".format(int(h), int(m), s)
 
+def tt(s):
+    s = int(s)
+
+    h, s = divmod(s, 3600)
+    m, s = divmod(s, 60)
+    if h > 0:
+        return "{:d}:{:02d}:{:02d}".format(h, m, s)
+    return "{:d}:{:02d}".format(m, s)
+
 
 def assan(x):
     # there is no standardization on escaping ["{", "}", "\\"]:
@@ -466,6 +475,8 @@ def main():
     ap.add_argument("--fontdir", metavar="DIR", type=str, default=None, help="path to noto-hinted")
     ap.add_argument("--dupe_thr", metavar="SEC", type=float, default=10, help="Hide duplicate messages from the same author within this many seconds")
     ap.add_argument("--no_del", action="store_true", help="keep msgs deleted by mods")
+    ap.add_argument("--start_time", metavar="STRT", type=int, default=None, help="Start time of the video in as a unix timestamp in seconds. Only used when there is no VOD chat download.")
+    ap.add_argument("--offset", metavar="OFS", type=float, default=None, help="Offset in seconds to apply to the chat. Positive values delay the chat, negative values advance the chat, the same as subtitle delay in MPV. Use with incomplete video downloads or when estimating the start time.")
     ap.add_argument("fn", metavar="JSON_FILE", nargs="+")
     ar = ap.parse_args()
     # fmt: on
@@ -560,8 +571,18 @@ def main():
             unix_ofs = unix - video
             break
 
+    if unix_ofs is None and ar.start_time is not None:
+        unix_ofs = ar.start_time
+
+    if unix_ofs is None and ar.offset is None:
+            raise Exception(
+                    "could not find time_in_seconds in json, set a start time or offset "
+                    "manually with --start_time/--offset or use v0.17 or earlier")
+
     if unix_ofs is None:
-        raise Exception("could not find time_in_seconds in json" + use_017)
+        unix_ofs = jd[0]["timestamp"] / 1_000_000.0
+
+
 
     debug(f"unixtime offset = {unix_ofs:.3f}")
     debug("adding video offset to all messages")
@@ -576,9 +597,8 @@ def main():
         if t is None:
             n_interp += 1
             sec = unix - unix_ofs
-            isec = int(sec)
             x["time_in_seconds"] = sec
-            x["time_text"] = f"{isec // 60}:{isec % 60:02d}"
+            x["time_text"] = tt(sec)
             tjd.append(x)
         elif t >= 10 and "amount" not in x:
             njd.append(x)
@@ -603,6 +623,10 @@ def main():
                 tjd.clear()
         else:
             njd.append(x)
+
+        if ar.offset is not None:
+            x["time_in_seconds"] += ar.offset
+            x["time_text"] = tt(x["time_in_seconds"])
 
     if tjd:
         njd.extend(tjd)
