@@ -19,6 +19,7 @@ import zlib
 import random
 import requests
 import pprint
+import hashlib
 import shutil
 import logging
 import argparse
@@ -608,11 +609,6 @@ def main():
                         if e["id"] not in emotes:
                             emotes[e["id"]] = e
 
-                # Workaround for https://github.com/xenova/chat-downloader/issues/59
-                # Can probably remove once it is fixed
-                if "message" in m and not isinstance(m["message"], str):
-                    m["message"] = m["message"]["message"]
-
                 # Must use a composite ID here so that legacy json can be used with new json
                 key = f"{m['timestamp']}\n{m['author']['id']}"
                 if key not in seen:
@@ -632,7 +628,7 @@ def main():
         cache_emotes(emotes, emote_dir)
 
         # Try to avoid collisions if someone does install these as system fonts.
-        font_name = f"SoftChat Custom Emotes {hex(hash(font_name))}"
+        font_name = f"SoftChat Custom Emotes {hashlib.sha256(font_name.encode('utf-8')).hexdigest()}"
         emote_shortcuts = generate_font(emotes, font_fn, font_name)
 
     use_018 = "; please use softchat v0.18 or older if your chat json was created with a chat_replay_downloader from before 2021-01-29-something"
