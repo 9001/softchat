@@ -17,7 +17,9 @@ import time
 import json
 import zlib
 import random
+import requests
 import pprint
+import shutil
 import logging
 import argparse
 import tempfile
@@ -121,6 +123,19 @@ except:
     import traceback
 
     warn("could not load fugashi:\n" + traceback.format_exc() + "-" * 72 + "\n")
+
+HAVE_FONTS = False
+try:
+    import fontforge
+
+    magick = ["magick", "convert"]
+    if shutil.which(magick[0]) is None:
+        magick = ["convert"]
+
+    if shutil.which(magick[0]) is not None:
+        HAVE_FONTS = True
+except:
+    pass
 
 
 class TextStuff(object):
@@ -390,6 +405,76 @@ def convert_old(m):
     return o
 
 
+def cache_emotes(emotes, emote_dir):
+    for e in emotes.values():
+        fname = os.path.join(emote_dir, e["id"].replace("/", "_")) + ".svg"
+        e["filename"] = fname
+        if not os.path.exists(fname):
+            info(f"Caching {e['name']}")
+            url = None
+            for img in e["images"]:
+                # Might be better off asking for 1000x1000 instead of source,
+                # may give slightly better results
+                if img["id"] == "source":
+                    url = img["url"]
+
+            if url is None:
+                error(f"Could not find source URL for {e['name']}")
+                sys.exit(1)
+
+            r = requests.get(url)
+            cmd = magick[:]
+            cmd.extend(
+                [
+                    "-",
+                    "-fill",
+                    "white",
+                    "-flatten",
+                    "-filter",
+                    "Jinc",
+                    "-resize",
+                    "1000x",
+                    "-colorspace",
+                    "gray",
+                    "-contrast-stretch",
+                    "0",
+                    fname,
+                ]
+            )
+
+            completed = sp.run(cmd, input=r.content)
+            r.close()
+
+            if completed.returncode != 0:
+                error(f"Failed to convert {e['name']}")
+                sys.exit(1)
+
+def generate_font(emotes, font_fn, font_name):
+    shortcuts = dict()
+    # Start of one of the private use areas.
+    # The other two don't work with embedded subtitle files for some reason.
+    point = 0xE000
+    font = fontforge.font()
+    font.familyname = font_name
+
+    for e in emotes.values():
+        g = font.createChar(point)
+        g.importOutlines(e["filename"])
+        # Lie about their width as a hacky way to give them some breathing room.
+        # Could do better, maybe will, but good enough for now.
+        g.width = 1100
+
+        for s in e["shortcuts"]:
+            if s in shortcuts:
+                warn("Found duplicate emote shortcut " + s)
+            shortcuts[s] = chr(point)
+        point += 1
+
+    font.correctDirection()
+    font.generate(font_fn)
+    return shortcuts
+
+
 class Okay(
     argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter
 ):
@@ -400,57 +485,6 @@ def main():
     t0_main = time.time()
 
     random.seed(b"nope")
-
-    emotes = {
-        ":_hic1:": "🅷",
-        ":_hic2:": "🅸",
-        ":_hic3:": "🅲",
-        ":_tea1:": "🅣",
-        ":_tea2:": "🅔",
-        ":_tea3:": "🅐",
-        ":_nou:": "🅄",
-        ":_aaa:": "🅰",
-        ":_bbb:": "🅱",
-        ":_ccc:": "🅲",
-        ":_ddd:": "🅳",
-        ":_eee:": "🅴",
-        ":_fff:": "🅵",
-        ":_ggg:": "🅶",
-        ":_hhh:": "🅷",
-        ":_iii:": "🅸",
-        ":_jjj:": "🅹",
-        ":_kkk:": "🅺",
-        ":_lll:": "🅻",
-        ":_mmm:": "🅼",
-        ":_nnn:": "🅽",
-        ":_ooo:": "🅾",
-        ":_ppp:": "🅿",
-        ":_qqq:": "🆀",
-        ":_rrr:": "🆁",
-        ":_sss:": "🆂",
-        ":_ttt:": "🆃",
-        ":_uuu:": "🆄",
-        ":_vvv:": "🆅",
-        ":_www:": "🆆",
-        ":_xxx:": "🆇",
-        ":_yyy:": "🆈",
-        ":_zzz:": "🆉",
-        ":_dragon:": "🐉",
-        ":_wowow:": "🆆",
-        ":_splash:": "😓",
-        ":_lol:": "😆",
-        ":_nani:": "😲",
-        ":_chungus:": "😕",
-        ":_kusa:": "草",
-        ":_rainbow:": "🌈",
-        ":_udekumi:": "😮",
-        ":_gata:": "ｶﾞﾀ",
-        ":_matsu:": "まつのこ",
-        ":_gebokawa": "げぼかわ",
-        ":_shot:": "💉",
-        ":_kuso:": "ｸｿ",
-        ":_mogu:": "😋",
-    }
 
     vips = [
         "UCkIccKaHDGA8lYVmUerLhag",
@@ -477,6 +511,9 @@ def main():
     ap.add_argument("--no_del", action="store_true", help="keep msgs deleted by mods")
     ap.add_argument("--start_time", metavar="STRT", type=int, default=None, help="Start time of the video in as a unix timestamp in seconds. Only used when there is no VOD chat download.")
     ap.add_argument("--offset", metavar="OFS", type=float, default=None, help="Offset in seconds to apply to the chat. Positive values delay the chat, negative values advance the chat, the same as subtitle delay in MPV. Use with incomplete video downloads or when estimating the start time.")
+    ap.add_argument("--emote_font", action="store_true", help="Generate a custom emote font for emotes found in this stream. The subtitle file produced will require the specific embedded font generated by this run to be embedded in the media file.")
+    ap.add_argument("--emote_cache", metavar="EMOTE_DIR", type=str, default=None, help="Directory to store emotes in. By default it is $pwd/emotes, but using the same directory for all invocations is safe. Will be created if it does not exist.")
+    ap.add_argument("--embed_files", action="store_true", help="Will attempt to embed the subtitles and emote font, if generated, into the media file. This will make a copy of the media file.")
     ap.add_argument("fn", metavar="JSON_FILE", nargs="+")
     ar = ap.parse_args()
     # fmt: on
@@ -484,6 +521,21 @@ def main():
     if ar.kana and not HAVE_TOKENIZER:
         error("you requested --kana but mecab failed to load")
         sys.exit(1)
+
+    if ar.emote_font and not HAVE_FONTS:
+        error("you requested --emote_font but lacked imagemagick or fontforge")
+        sys.exit(1)
+
+    emote_dir = "emotes"
+    if ar.emote_cache:
+        emote_dir = ar.emote_cache
+
+    if ar.emote_font:
+        if os.path.exists(emote_dir) and not os.path.isdir(emote_dir):
+            error("Emote cache directory exists as a regular file.")
+            sys.exit(1)
+        if not os.path.exists(emote_dir):
+            os.mkdir(emote_dir)
 
     if not ar.sz:
         ar.sz = 18 if ar.m == 1 else 24
@@ -497,6 +549,7 @@ def main():
 
     z = TextStuff(ar.sz, ar.fontdir)
     fofs = z.font_ofs
+    emotes = dict()
 
     jd = []
     deleted_messages = set()
@@ -549,14 +602,40 @@ def main():
                 ):
                     continue
 
+                # For now, assume emote shortcuts are unique so we can postpone processing them
+                if "emotes" in m:
+                    for e in m["emotes"]:
+                        if e["id"] not in emotes:
+                            emotes[e["id"]] = e
+
+                # Workaround for https://github.com/xenova/chat-downloader/issues/59
+                # Can probably remove once it is fixed
+                if "message" in m and not isinstance(m["message"], str):
+                    m["message"] = m["message"]["message"]
+
                 # Must use a composite ID here so that legacy json can be used with new json
                 key = f"{m['timestamp']}\n{m['author']['id']}"
                 if key not in seen:
                     seen.add(key)
                     jd.append(m)
 
+    if ar.emote_font and len(emotes) == 0:
+        info("No emotes found")
+        ar.emote_font = False
+
+    font_name = "Squished Noto Sans CJK JP Regular"
+    font_fn = ar.fn[0].rsplit(".", 1)[0] + ".ttf"
+    emote_shortcuts = dict()
+
+    if ar.emote_font:
+        info(f"Generating custom font with {len(emotes)} emotes")
+        cache_emotes(emotes, emote_dir)
+
+        # Try to avoid collisions if someone does install these as system fonts.
+        font_name = f"SoftChat Custom Emotes {hex(hash(font_name))}"
+        emote_shortcuts = generate_font(emotes, font_fn, font_name)
+
     use_018 = "; please use softchat v0.18 or older if your chat json was created with a chat_replay_downloader from before 2021-01-29-something"
-    use_017 = "; please use softchat v0.17 or older if your chat json was created with a really old chat_replay_downloader"
     if not jd:
         raise Exception("no messages were loaded" + use_018)
 
@@ -575,14 +654,13 @@ def main():
         unix_ofs = ar.start_time
 
     if unix_ofs is None and ar.offset is None:
-            raise Exception(
-                    "could not find time_in_seconds in json, set a start time or offset "
-                    "manually with --start_time/--offset or use v0.17 or earlier")
+        raise Exception(
+            "could not find time_in_seconds in json, set a start time or offset "
+            "manually with --start_time/--offset or use v0.17 or earlier"
+        )
 
     if unix_ofs is None:
         unix_ofs = jd[0]["timestamp"] / 1_000_000.0
-
-
 
     debug(f"unixtime offset = {unix_ofs:.3f}")
     debug("adding video offset to all messages")
@@ -788,7 +866,7 @@ def main():
             )
 
         if ":" in txt:
-            for k, v in emotes.items():
+            for k, v in emote_shortcuts.items():
                 txt = txt.replace(k, v)
 
         n_ascii = len(ptn_ascii.findall(txt))
@@ -933,12 +1011,12 @@ Video Zoom Percent: 1.000000
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: a,Squished Noto Sans CJK JP Regular,{sz},&H00FFFFFF,&H000000FF,&H{back}000000,&H{shad}000000,0,0,0,0,100,100,0,0,{opaq},2,1,1,0,0,0,1
+Style: a,{font},{sz},&H00FFFFFF,&H000000FF,&H{back}000000,&H{shad}000000,0,0,0,0,100,100,0,0,{opaq},2,1,1,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """.format(
-                vw=vw, vh=vh, sz=ar.sz, **opts
+                vw=vw, vh=vh, sz=ar.sz, font=font_name, **opts
             ).encode(
                 "utf-8"
             )
@@ -1246,6 +1324,48 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         warn(cdur_err)
     else:
         info(cdur_msg)
+
+    if ar.embed_files and not media_fn:
+        error("you requested --embed_files but the media file could not be located")
+    elif ar.embed_files:
+        split = media_fn.rsplit(".", 1)
+        merged_fn = media_fn.rsplit(".", 1)[0] + ".softchat-merged.mkv"
+        info(f"Producing merged file {merged_fn}.")
+        # TODO -- Make this strip out existing subtitles/attachments so it
+        # can be rerun easily without needing to keep the unmerged video
+        cmd = [
+            "ffmpeg",
+            "-i",
+            media_fn,
+            "-i",
+            out_fn,
+            "-codec",
+            "copy",
+            "-disposition:s:0",
+            "default",
+        ]
+
+        if ar.emote_font:
+            cmd.extend(
+                [
+                    "-attach",
+                    font_fn,
+                    "-metadata:s:t",
+                    "mimetype=application/x-truetype-font",
+                ]
+            )
+
+        cmd.extend([merged_fn, "-y"])
+
+        completed = sp.run(cmd, capture_output=True)
+        if completed.returncode == 0:
+            info(
+                "Merged media file finished. "
+                "You should check the new file before removing the old file."
+            )
+        if completed.returncode != 0:
+            error(f"Failed to embed files into {merged_fn}")
+            sys.exit(1)
 
     # from pprint import pprint; pprint(msgs[-5:])
     t1_main = time.time()
