@@ -564,7 +564,8 @@ def main():
     ap.add_argument("--emote_cache", metavar="EMOTE_DIR", type=str, default=None, help="Directory to store emotes in. By default it is $pwd/emotes, but using the same directory for all invocations is safe. Will be created if it does not exist.")
     ap.add_argument("--embed_files", action="store_true", help="Will attempt to embed the subtitles and emote font, if generated, into the media file. This will make a copy of the media file.")
     ap.add_argument("--cleanup", action="store_true", help="If --embed_files is used, delete the produced subtitle and font files after embedding them. The original media file and chat downloads are never touched.")
-    ap.add_argument("--media", metavar="MEDIA", default=None, help="The video file for the stream. Passing this is optional since it will be detected automatically if it shares a name with the chat replay file.")
+    ap.add_argument("--media", metavar="MEDIA", type=str, default=None, help="The video file for the stream. Passing this is optional since it will be detected automatically if it shares a name with the chat replay file.")
+    ap.add_argument("--emote_chat_file", metavar="EMOTE_DUMP", type=str, default=None, help="You probably don't need this. A chat file for another stream including emotes, for use with legacy chat files that do not include emotes when it's impossible to get a new chat replay download.")
     ap.add_argument("fn", metavar="JSON_FILE", nargs="+")
     ar = ap.parse_args()
     # fmt: on
@@ -664,6 +665,43 @@ def main():
                 if key not in seen:
                     seen.add(key)
                     jd.append(m)
+
+    if ar.emote_chat_file is not None:
+        info(f"loading emotes from {ar.emote_chat_file}")
+
+        with open(ar.emote_chat_file, "r", encoding="utf-8") as f:
+            err = None
+            try:
+                jd2 = json.load(f)
+            except Exception as ex:
+                err = repr(ex)
+
+            if not err and not jd2:
+                err = "empty json file?"
+
+            if not err:
+                try:
+                    if jd2.get("formats"):
+                        err = "this is a youtube-dl info file, not a chatlog"
+                except:
+                    pass
+
+            if not err:
+                try:
+                    _ = jd2[0]["timestamp"]
+                except:
+                    err = "does not look like a chatlog"
+
+            if err:
+                error(f"failed: {err}")
+                sys.exit(1)
+
+            for m in jd2:
+                # For now, assume emote shortcuts are unique so we can postpone processing them
+                if "emotes" in m:
+                    for e in m["emotes"]:
+                        if e["id"] not in emotes:
+                            emotes[e["id"]] = e
 
     if ar.emote_font and len(emotes) == 0:
         info("No emotes found")
@@ -1421,7 +1459,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             )
             if ar.cleanup:
                 os.remove(out_fn)
-                os.remove(font_fn)
+                if ar.emote_font:
+                    os.remove(font_fn)
         if completed.returncode != 0:
             error(f"Failed to embed files into {merged_fn}")
             error(completed.stderr.decode("utf-8"))
