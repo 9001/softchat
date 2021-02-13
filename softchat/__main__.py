@@ -405,7 +405,7 @@ def get_ff_dur(fn):
                 fn,
             ]
         )
-        return float(ret)
+        return float(ret.split(b"\n", 1)[0])
     elif fn.lower().endswith("webm"):
         ret = sp.check_output(
             [
