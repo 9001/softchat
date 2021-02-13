@@ -455,7 +455,8 @@ def convert_old(m):
 
 def cache_emotes(emotes, emote_dir):
     for e in emotes.values():
-        fname = os.path.join(emote_dir, e["id"].replace("/", "_")) + ".svg"
+        source_fname = os.path.join(emote_dir, e["id"].replace("/", "_"))
+        fname = source_fname + ".svg"
         e["filename"] = fname
         if not os.path.exists(fname):
             info(f"Caching {e['name']}")
@@ -471,10 +472,16 @@ def cache_emotes(emotes, emote_dir):
                 sys.exit(1)
 
             r = requests.get(url)
+            # Save the originals in case youtube stops providing them for whatever reason.
+            # These can also be used to manually replace the svgs if the automatically
+            # generated one is of low quality.
+            with open(source_fname, "wb") as f:
+                f.write(r.content)
+
             cmd = magick[:]
             cmd.extend(
                 [
-                    "-",
+                    source_fname,
                     "-fill",
                     "white",
                     "-flatten",
@@ -485,12 +492,16 @@ def cache_emotes(emotes, emote_dir):
                     "-colorspace",
                     "gray",
                     "-contrast-stretch",
-                    "0",
+                    # Determined experimentally to be a good middle-ground.
+                    # Higher values catch more detail but values that are too
+                    # high produce noisy, ugly output.
+                    # There is no singly best option for all emotes.
+                    "3%",
                     fname,
                 ]
             )
 
-            completed = sp.run(cmd, input=r.content)
+            completed = sp.run(cmd)
             r.close()
 
             if completed.returncode != 0:
