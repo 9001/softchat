@@ -21,13 +21,14 @@ import requests
 import pprint
 import hashlib
 import shutil
-import logging
 import argparse
 import tempfile
 import colorsys
 import subprocess as sp
-from datetime import datetime
 from PIL import ImageFont, ImageDraw, Image
+from .util import debug, info, warn, error, init_logger
+from .util import WINDOWS
+from .util import shell_esc
 
 
 try:
@@ -38,45 +39,8 @@ except ImportError:
     HAVE_NOTO_MERGE = False
 
 
-debug = logging.debug
-info = logging.info
-warn = logging.warning
-error = logging.error
-
-
-LINUX = sys.platform.startswith("linux")
-WINDOWS = sys.platform == "win32"
-MACOS = sys.platform == "darwin"
-
-
-class LoggerFmt(logging.Formatter):
-    def format(self, record):
-        if record.levelno == logging.DEBUG:
-            ansi = "\033[01;30m"
-        elif record.levelno == logging.INFO:
-            ansi = "\033[0;32m"
-        elif record.levelno == logging.WARN:
-            ansi = "\033[0;33m"
-        else:
-            ansi = "\033[01;31m"
-
-        ts = datetime.utcfromtimestamp(record.created)
-        ts = ts.strftime("%H:%M:%S.%f")[:-3]
-        return f"\033[0;36m{ts}{ansi} {record.msg}\033[0m"
-
-
 if __name__ == "__main__":
-    if WINDOWS:
-        os.system("")
-
-    logging.basicConfig(
-        level=logging.INFO,  # INFO DEBUG
-        format="\033[36m%(asctime)s.%(msecs)03d\033[0m %(message)s",
-        datefmt="%H%M%S",
-    )
-    lh = logging.StreamHandler(sys.stderr)
-    lh.setFormatter(LoggerFmt())
-    logging.root.handlers = [lh]
+    init_logger("-d" in sys.argv)
 
 
 try:
@@ -125,16 +89,38 @@ except:
 
     warn("could not load fugashi:\n" + traceback.format_exc() + "-" * 72 + "\n")
 
-HAVE_FONTS = False
+
+def find_fontforge():
+    """fontforge comes with a full python env on windows (nice), try to find it"""
+    search_dirs = []
+    for k in ["ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"]:
+        v = os.environ.get(k)
+        if v and v not in search_dirs:
+            search_dirs.append(v)
+
+    for sdir in search_dirs:
+        ffpy = os.path.join(sdir, "FontForgeBuilds/bin/ffpython.exe")
+        if os.path.exists(ffpy):
+            return ffpy
+
+    return None
+
+
+HAVE_FONTFORGE = True
 try:
     import fontforge
+except:
+    HAVE_FONTFORGE = find_fontforge()
 
+
+HAVE_MAGICK = False
+try:
     magick = ["magick", "convert"]
-    if shutil.which(magick[0]) is None:
+    if shutil.which(magick[0]) is None and not WINDOWS:
         magick = ["convert"]
 
     if shutil.which(magick[0]) is not None:
-        HAVE_FONTS = True
+        HAVE_MAGICK = True
 except:
     pass
 
@@ -453,12 +439,18 @@ def convert_old(m):
     return o
 
 
-def cache_emotes(emotes, emote_dir):
+def cache_emotes(emotes, emote_dir, overwrite):
+    try:
+        lastmod_softchat = os.stat(os.path.abspath(__file__)).st_mtime
+    except:
+        lastmod_softchat = 0
+        warn("could not lastmod self, will not replace existing png")
+
     for e in emotes.values():
         source_fname = os.path.join(emote_dir, e["id"].replace("/", "_"))
-        fname = source_fname + ".svg"
-        e["filename"] = fname
-        if not os.path.exists(fname):
+        fname = source_fname + ".png"
+        e["filename"] = os.path.abspath(fname)
+        if not os.path.exists(source_fname):
             info(f"Caching {e['name']}")
             url = None
             for img in e["images"]:
@@ -478,63 +470,81 @@ def cache_emotes(emotes, emote_dir):
             with open(source_fname, "wb") as f:
                 f.write(r.content)
 
-            cmd = magick[:]
-            cmd.extend(
-                [
-                    source_fname,
-                    "-fill",
-                    "white",
-                    "-flatten",
-                    "-filter",
-                    "Jinc",
-                    "-resize",
-                    "1000x",
-                    "-colorspace",
-                    "gray",
-                    "-contrast-stretch",
-                    # Determined experimentally to be a good middle-ground.
-                    # Higher black values catch more detail but values that are too
-                    # high produce noisy, ugly output. Higher white values result
-                    # in better handling of flat areas and gradients but values
-                    # that are too high will destroy detail.
-                    # There is no single best option for all emotes.
-                    "3%x9%",
-                    fname,
-                ]
-            )
-
-            completed = sp.run(cmd)
             r.close()
 
+        try:
+            lastmod = os.stat(fname).st_mtime
+            if not overwrite:
+                lastmod = lastmod_softchat
+        except:
+            lastmod = 0
+
+        if not lastmod or lastmod < lastmod_softchat:
+            info(f"Scaling {e['name']:14} {e['filename']}")
+            cmd = magick[:]
+            # fmt: off
+            cmd.extend([
+                source_fname,
+                "-fill", "white",
+                "-flatten",
+                "-colorspace", "gray",
+                # Determined experimentally to be a good middle-ground.
+                # Higher black values catch more detail but values that are too
+                # high produce noisy, ugly output. Higher white values result
+                # in better handling of flat areas and gradients but values
+                # that are too high will destroy detail.
+                # There is no single best option for all emotes.
+                "-contrast-stretch", "3%x9%",
+                "-define", "filter:lobes=2",
+                "-filter", "Jinc",
+                "-resize", "1000x",
+                fname,
+            ])
+            # fmt: on
+
+            completed = sp.run(cmd)
             if completed.returncode != 0:
                 error(f"Failed to convert {e['name']}")
+                warn(shell_esc(cmd))
                 sys.exit(1)
 
 
+def generate_font_with_ffpython(*args):
+    jtxt = json.dumps(args)
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", prefix="softchat-", delete=False
+    ) as tf:
+        tf_path = tf.name
+        tf.write(jtxt)
+
+    libdir = os.path.dirname(os.path.abspath(__file__))
+    libdir = os.path.join(libdir, "..")
+
+    env = os.environ.copy()
+    old_libdir = env.get("PYTHONPATH")
+    if old_libdir:
+        libdir = [x.strip(os.pathsep) for x in [libdir, old_libdir]]
+        libdir = os.pathsep.join(libdir)
+
+    env["PYTHONPATH"] = libdir
+
+    sp.check_call([HAVE_FONTFORGE, "-m", "softchat.fff", tf_path], env=env)
+
+    with open(tf_path, "r", encoding="utf-8") as f:
+        ret = f.read()
+
+    os.unlink(tf_path)
+    return json.loads(ret)
+
+
 def generate_font(emotes, font_fn, font_name):
-    shortcuts = dict()
-    # Start of one of the private use areas.
-    # The other two don't work with embedded subtitle files for some reason.
-    point = 0xE000
-    font = fontforge.font()
-    font.familyname = font_name
+    args = [emotes, font_fn, font_name]
+    if HAVE_FONTFORGE is not True:
+        return generate_font_with_ffpython(*args)
 
-    for e in emotes.values():
-        g = font.createChar(point)
-        g.importOutlines(e["filename"])
-        # Lie about their width as a hacky way to give them some breathing room.
-        # Could do better, maybe will, but good enough for now.
-        g.width = 1100
+    from . import fff
 
-        for s in e["shortcuts"]:
-            if s in shortcuts:
-                warn("Found duplicate emote shortcut " + s)
-            shortcuts[s] = chr(point)
-        point += 1
-
-    font.correctDirection()
-    font.generate(font_fn)
-    return shortcuts
+    return fff.gen_fonts(*args)
 
 
 class Okay(
@@ -560,6 +570,7 @@ def main():
     )
 
     # fmt: off
+    ap.add_argument("-d", action="store_true", help="emable debug logging")
     ap.add_argument("-m", metavar="MODE", type=int, default=1, help="mode, 1=box, 2=danmaku")
     ap.add_argument("-r", metavar="WxH", type=str, default="1280x720", help="video res")
     ap.add_argument("-b", metavar="WxH+X+Y", type=str, default=None, help="subtitle area")
@@ -575,6 +586,7 @@ def main():
     ap.add_argument("--offset", metavar="OFS", type=float, default=None, help="Offset in seconds to apply to the chat. Positive values delay the chat, negative values advance the chat, the same as subtitle delay in MPV. Use with incomplete video downloads or when estimating the start time.")
     ap.add_argument("--emote_font", action="store_true", help="Generate a custom emote font for emotes found in this stream. The subtitle file produced will require the specific embedded font generated by this run to be embedded in the media file.")
     ap.add_argument("--emote_cache", metavar="EMOTE_DIR", type=str, default=None, help="Directory to store emotes in. By default it is $pwd/emotes, but using the same directory for all invocations is safe. Will be created if it does not exist.")
+    ap.add_argument("--emote_refilter", action="store_true", help="Replaces your preprocessed emotes (*.png) if this version of softchat is more recent than each png")
     ap.add_argument("--embed_files", action="store_true", help="Will attempt to embed the subtitles and emote font, if generated, into the media file. This will make a copy of the media file.")
     ap.add_argument("--cleanup", action="store_true", help="If --embed_files is used, delete the produced subtitle and font files after embedding them. The original media file and chat downloads are never touched.")
     ap.add_argument("--media", metavar="MEDIA", type=str, default=None, help="The video file for the stream. Passing this is optional since it will be detected automatically if it shares a name with the chat replay file.")
@@ -587,9 +599,18 @@ def main():
         error("you requested --kana but mecab failed to load")
         sys.exit(1)
 
-    if ar.emote_font and not HAVE_FONTS:
-        error("you requested --emote_font but lacked imagemagick or fontforge")
-        sys.exit(1)
+    if ar.emote_font:
+        err = []
+        if not HAVE_MAGICK:
+            err.append("imagemagick")
+
+        if not HAVE_FONTFORGE:
+            err.append("fontforge")
+
+        if err:
+            err = ", ".join(err)
+            error(f"you requested --emote_font but {err} is not installed")
+            sys.exit(1)
 
     emote_dir = "emotes"
     if ar.emote_cache:
@@ -726,7 +747,7 @@ def main():
 
     if ar.emote_font:
         info(f"Generating custom font with {len(emotes)} emotes")
-        cache_emotes(emotes, emote_dir)
+        cache_emotes(emotes, emote_dir, ar.emote_refilter)
 
         # Try to avoid collisions if someone does install these as system fonts.
         font_name = f"SoftChat Custom Emotes {hashlib.sha256(font_name.encode('utf-8')).hexdigest()}"
