@@ -493,10 +493,12 @@ def cache_emotes(emotes, emote_dir):
                     "gray",
                     "-contrast-stretch",
                     # Determined experimentally to be a good middle-ground.
-                    # Higher values catch more detail but values that are too
-                    # high produce noisy, ugly output.
-                    # There is no singly best option for all emotes.
-                    "3%",
+                    # Higher black values catch more detail but values that are too
+                    # high produce noisy, ugly output. Higher white values result
+                    # in better handling of flat areas and gradients but values
+                    # that are too high will destroy detail.
+                    # There is no single best option for all emotes.
+                    "3%x9%",
                     fname,
                 ]
             )
