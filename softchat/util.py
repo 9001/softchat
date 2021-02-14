@@ -12,10 +12,11 @@ WINDOWS = sys.platform == "win32"
 MACOS = sys.platform == "darwin"
 
 
-debug = logging.debug
-info = logging.info
-warn = logging.warning
-error = logging.error
+logger = logging.getLogger(__name__)
+debug = logger.debug
+info = logger.info
+warn = logger.warning
+error = logger.error
 
 
 class LoggerFmt(logging.Formatter):
@@ -31,21 +32,29 @@ class LoggerFmt(logging.Formatter):
 
         ts = datetime.utcfromtimestamp(record.created)
         ts = ts.strftime("%H:%M:%S.%f")[:-3]
-        return f"\033[0;36m{ts}{ansi} {record.msg}\033[0m"
+
+        msg = record.msg
+        if record.args:
+            msg = msg % record.args
+
+        return f"\033[0;36m{ts}{ansi} {msg}\033[0m"
 
 
 def init_logger(debug):
     if WINDOWS:
         os.system("")
 
+    lv = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(
-        level=logging.DEBUG if debug else logging.INFO,
+        level=lv,
         format="\033[36m%(asctime)s.%(msecs)03d\033[0m %(message)s",
         datefmt="%H%M%S",
     )
     lh = logging.StreamHandler(sys.stderr)
     lh.setFormatter(LoggerFmt())
-    logging.root.handlers = [lh]
+    logging.root.handlers = []
+    logger.handlers = [lh]
+    logger.setLevel(lv)
 
 
 def shell_esc(cmd):

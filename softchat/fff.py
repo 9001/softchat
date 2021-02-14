@@ -18,13 +18,15 @@ def gen_fonts(emotes, font_fn, font_name):
 
     for e in emotes.values():
         g = font.createChar(point)
-        raster_fn = e["filename"]
-        if not os.path.exists(raster_fn):
-            raise Exception("not found: " + raster_fn)
+        src_fn = e["filename"]
+        if not os.path.exists(src_fn):
+            raise Exception("not found: " + src_fn)
 
-        debug("src: " + raster_fn)
-        g.importOutlines(raster_fn)
-        g.autoTrace()
+        debug("src: " + src_fn)
+        g.importOutlines(src_fn)
+        if not src_fn.endswith(".svg"):
+            g.autoTrace()
+
         # Lie about their width as a hacky way to give them some breathing room.
         # Could do better, maybe will, but good enough for now.
         g.width = 1100

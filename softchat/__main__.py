@@ -444,13 +444,17 @@ def cache_emotes(emotes, emote_dir, overwrite):
         lastmod_softchat = os.stat(os.path.abspath(__file__)).st_mtime
     except:
         lastmod_softchat = 0
-        warn("could not lastmod self, will not replace existing png")
+        warn("could not lastmod self, will not replace existing png/svg emotes")
 
     for e in emotes.values():
         source_fname = os.path.join(emote_dir, e["id"].replace("/", "_"))
-        fname = source_fname + ".png"
-        e["filename"] = os.path.abspath(fname)
-        if not os.path.exists(source_fname):
+        try:
+            im = Image.open(source_fname)
+            source_ok = True
+        except:
+            source_ok = False
+
+        if not source_ok:
             info(f"Caching {e['name']}")
             url = None
             for img in e["images"]:
@@ -472,15 +476,34 @@ def cache_emotes(emotes, emote_dir, overwrite):
 
             r.close()
 
-        try:
-            lastmod = os.stat(fname).st_mtime
-            if not overwrite:
-                lastmod = lastmod_softchat
-        except:
-            lastmod = 0
+        # look for existing intermediate file for fontforge
+        for ext in [".png", ".svg"]:
+            fname = source_fname + ext
+            try:
+                lastmod = os.stat(fname).st_mtime
+                im = Image.open(fname)
+                if not overwrite:
+                    lastmod = lastmod_softchat + 1
 
-        if not lastmod or lastmod < lastmod_softchat:
-            info(f"Scaling {e['name']:14} {e['filename']}")
+                break
+            except:
+                lastmod = 0
+                fname = None
+
+        if not fname:
+            if WINDOWS:
+                # windows imagemagick doesn't seem to have potrace
+                fname = source_fname + ".png"
+            else:
+                # macports does, most linux distros probably do
+                fname = source_fname + ".svg"
+
+        e["filename"] = os.path.abspath(fname)
+
+        if lastmod > lastmod_softchat:
+            debug(f"reusing {e['name']:14} {fname}")
+        else:
+            info(f"Convert {e['name']:14} {fname}")
             cmd = magick[:]
             # fmt: off
             cmd.extend([
