@@ -248,23 +248,32 @@ class TextStuff(object):
         info(f"writing {self.otf_mod}")
         font.save(self.otf_mod)
 
-    def vsize_impl(self, text):
+    def vsize_impl(self, text, has_emotes):
+        if has_emotes:
+            text = "".join(
+                [
+                    # adjust "@l" as needed
+                    c if u < 0xE000 or u > 0xF8FF else "@l"
+                    for c, u in zip(text, [ord(x) for x in text])
+                ]
+            )
+
         w, h = self.imd.textsize("|" + text.replace("\n", "\n|"), self.font)
         return w - self.pipe_width, h
 
-    def caching_vsize(self, text):
+    def caching_vsize(self, text, has_emotes):
         if len(text) > 24:
-            return self.vsize_impl(text)
+            return self.vsize_impl(text, has_emotes)
 
         # faster than try/catch and get(text,None)
         if text in self.cache:
             return self.cache[text]
 
-        ret = self.vsize_impl(text)
+        ret = self.vsize_impl(text, has_emotes)
         self.cache[text] = ret
         return ret
 
-    def unrag(self, text, width):
+    def unrag(self, text, width, has_emotes):
         """
         copied from  http://xxyxyz.org/line-breaking/
         license clarified per email:
@@ -276,7 +285,7 @@ class TextStuff(object):
         count = len(words)
         offsets = [0]
         for w in words:
-            offsets.append(offsets[-1] + self.vsize(w + "_")[0])
+            offsets.append(offsets[-1] + self.vsize(w + "_", has_emotes)[0])
 
         minima = [0] + [10 ** 20] * count
         breaks = [0] * (count + 1)
@@ -1016,9 +1025,14 @@ def main():
                 f"time drift [{t_fsec}] [{t_isec}] [{t_isec2}] [{t_hms}]\n  (pls provide this chat-rip to ed)"
             )
 
+        has_emotes = False
         if ":" in txt:
+            old_txt = txt
             for k, v in emote_shortcuts.items():
                 txt = txt.replace(k, v)
+
+            if txt != old_txt:
+                has_emotes = True
 
         n_ascii = len(ptn_ascii.findall(txt))
         n_kanji = len(ptn_kanji.findall(txt))
@@ -1052,8 +1066,8 @@ def main():
 
         # wrap to specified width
         # by splitting on ascii whitespace
-        vtxt = z.unrag(txt, wrap_width)
-        vsz = z.vsize("\n".join(vtxt))
+        vtxt = z.unrag(txt, wrap_width, has_emotes)
+        vsz = z.vsize("\n".join(vtxt), has_emotes)
 
         if vsz[0] >= bw and is_jp:
             # too wide, is japanese,
@@ -1061,11 +1075,11 @@ def main():
             vtxt = ptn_pre.sub("\\1\n", txt)
             vtxt = ptn_post.sub("\n\\1", vtxt)
             vtxt = vtxt.split("\n")
-            vsz = z.vsize("\n".join(vtxt))
+            vsz = z.vsize("\n".join(vtxt), has_emotes)
 
             if vsz[0] >= bw and HAVE_TOKENIZER:
                 # still too wide, wrap on word-boundaries
-                vtxt = z.unrag(wakati.parse(txt), bw)
+                vtxt = z.unrag(wakati.parse(txt), bw, has_emotes)
                 vtxt = [x.replace(" ", "") for x in vtxt]
 
                 for n in range(1, len(vtxt)):
@@ -1076,7 +1090,7 @@ def main():
                         vtxt[n - 1] += ln[: m.end()]
                         vtxt[n] = ln[m.end() :]
 
-                vsz = z.vsize("\n".join(vtxt))
+                vsz = z.vsize("\n".join(vtxt), has_emotes)
 
         vtxt = [x for x in vtxt if x.strip()]
 
@@ -1107,6 +1121,7 @@ def main():
             "sx": sx,
             "sy": sy,
             "txt": vtxt,
+            "has_emotes": has_emotes,
         }
 
         if "amount" in msg:
@@ -1278,7 +1293,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                                 ).encode("utf-8")
                             )
             else:
-                txts, t0, w, h = [msg[x] for x in ["txt", "t0", "sx", "sy"]]
+                txts, t0, w, h, has_emotes = [
+                    msg[x] for x in ["txt", "t0", "sx", "sy", "has_emotes"]
+                ]
                 txt = "\\N".join(txts)
 
                 # ass linespacing is huge, compensate (wild guess btw)
