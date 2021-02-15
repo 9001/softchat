@@ -40,6 +40,8 @@ additionally, on windows you *may* need to `--vo=direct3d` and *not* fullscreen 
 
 The fonts produced by `--emote_font` need to be installed as system fonts or embedded. It's highly recommended to use `--embed_files` with `--emote_font` because the produced font is specific to that particular subtitle file and they need to be used together, so they are useless as system fonts.
 
+Override automatically vectorized emotes by creating a ".manual.svg" file in the cache directory. So for the emote `UCS9uQI-jC3DE0L4IpXyvr6w_Do6dXuL6LZCQ_AP4-buoDQ` create the file `UCS9uQI-jC3DE0L4IpXyvr6w_Do6dXuL6LZCQ_AP4-buoDQ.manual.svg`. This can be used for emotes where the automatic version is of low quality.
+
 
 # about
 
@@ -97,6 +99,7 @@ The fonts produced by `--emote_font` need to be installed as system fonts or emb
 * enable `--emote_font` with:
   * [fontforge](https://fontforge.org)
   * [ImageMagick](https://imagemagick.org)
+  * [potrace](http://potrace.sourceforge.net/)
 
 
 # maintainers

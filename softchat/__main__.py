@@ -455,11 +455,8 @@ def cache_emotes(emotes, emote_dir, overwrite):
             source_ok = False
 
         if not source_ok:
-            info(f"Caching {e['name']}")
             url = None
             for img in e["images"]:
-                # Might be better off asking for 1000x1000 instead of source,
-                # may give slightly better results
                 if img["id"] == "source":
                     url = img["url"]
 
@@ -481,10 +478,6 @@ def cache_emotes(emotes, emote_dir, overwrite):
             fname = source_fname + ext
             try:
                 lastmod = os.stat(fname).st_mtime
-                im = Image.open(fname)
-                if not overwrite:
-                    lastmod = lastmod_softchat + 1
-
                 break
             except:
                 lastmod = 0
@@ -499,17 +492,23 @@ def cache_emotes(emotes, emote_dir, overwrite):
                 fname = source_fname + ".svg"
 
         e["filename"] = os.path.abspath(fname)
+        manual_fname = source_fname + ".manual.svg"
 
-        if lastmod > lastmod_softchat:
-            debug(f"reusing {e['name']:14} {fname}")
+        if os.path.isfile(manual_fname):
+            debug(f"Using {e['name']:14} {manual_fname}")
+            e["filename"] = os.path.abspath(manual_fname)
+        elif (lastmod != 0 and not overwrite) or lastmod > lastmod_softchat:
+            debug(f"Reusing {e['name']:14} {fname}")
         else:
-            info(f"Convert {e['name']:14} {fname}")
+            info(f"Converting {e['name']:14} {fname}")
             cmd = magick[:]
             # fmt: off
             cmd.extend([
                 source_fname,
                 "-fill", "white",
                 "-flatten",
+                "-filter", "Jinc",
+                "-resize", "1000x",
                 "-colorspace", "gray",
                 # Determined experimentally to be a good middle-ground.
                 # Higher black values catch more detail but values that are too
@@ -518,9 +517,6 @@ def cache_emotes(emotes, emote_dir, overwrite):
                 # that are too high will destroy detail.
                 # There is no single best option for all emotes.
                 "-contrast-stretch", "3%x9%",
-                "-define", "filter:lobes=2",
-                "-filter", "Jinc",
-                "-resize", "1000x",
                 fname,
             ])
             # fmt: on
