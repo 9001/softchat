@@ -1497,8 +1497,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                                 # 4 emotes == fscx400 fsp-173 == yoooo
 
                                 scx = int(len(emotes) * 173.0 - 20)
-                                sp = ar.sz / 1.57  # was supposed to be 1.48 ah whatever
-                                txt2 += rf"{{\\c&H{bgr_msg}\\fscx{scx}\\fsp-{sp}}}█{{\\fscx100\\fsp0\\c&H{bgr_fg}\\1a&H00&\\bord1\\shad0}}{emotes}{{\\bord{bord}\\shad{shad}}}"
+                                fsp = ar.sz / 1.57  # was supposed to be 1.48 ah whatever
+                                txt2 += rf"{{\\c&H{bgr_msg}\\fscx{scx}\\fsp-{fsp}}}█{{\\fscx100\\fsp0\\c&H{bgr_fg}\\1a&H00&\\bord1\\shad0}}{emotes}{{\\bord{bord}\\shad{shad}}}"
                                 emotes = ""
                             if u:
                                 txt2 += c
