@@ -4,6 +4,12 @@
 * MIT-Licensed, 2020-10-12, ed @ irc.rizon.net
 
 
+# quality
+* well-tested, well-regarded software
+* check out some of the authentic user feedback below
+![user feedback](./glowing-reviews.png)
+
+
 # howto
 
 * first-time setup (all recommended steps):
