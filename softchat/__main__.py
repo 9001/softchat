@@ -16,6 +16,7 @@ import sys
 import time
 import json
 import zlib
+import base64
 import random
 import requests
 import pprint
@@ -765,16 +766,16 @@ def main():
         info("No emotes found")
         ar.emote_font = False
 
-    font_name = "Squished Noto Sans CJK JP Regular"
     font_fn = ar.fn[0].rsplit(".", 1)[0] + ".ttf"
     emote_shortcuts = dict()
-
     if ar.emote_font:
         info(f"Generating custom font with {len(emotes)} emotes")
         cache_emotes(emotes, emote_dir, ar.emote_refilter)
 
         # Try to avoid collisions if someone does install these as system fonts.
-        font_name = f"SoftChat Custom Emotes {hashlib.sha256(font_name.encode('utf-8')).hexdigest()}"
+        font_hash = hashlib.sha512(ar.fn[0].encode("utf-8")).digest()
+        font_hash = base64.urlsafe_b64encode(font_hash)[:16].decode("ascii")
+        font_name = f"SoftChat Custom Emotes {font_hash}"
         emote_shortcuts = generate_font(emotes, font_fn, font_name)
 
     use_018 = "; please use softchat v0.18 or older if your chat json was created with a chat_replay_downloader from before 2021-01-29-something"
