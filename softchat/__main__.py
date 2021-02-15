@@ -103,6 +103,11 @@ def find_fontforge():
         if os.path.exists(ffpy):
             return ffpy
 
+    # actually they do on macos as well
+    ffpy = "/Applications/FontForge.app/Contents/MacOS/FFPython"
+    if os.path.exists(ffpy):
+        return ffpy
+
     return None
 
 
@@ -806,6 +811,7 @@ def main():
     tjd = list()
     njd = list()
     n_interp = 0
+    prev_msg = None
     for x in jd:
         unix = x["timestamp"] / 1_000_000.0
         t = x.get("time_in_seconds", None)
@@ -821,7 +827,7 @@ def main():
             new_ofs = unix - video
             diff = abs(new_ofs - unix_ofs)
             if diff >= 10:
-                print(repr(x))
+                pprint.pprint({"prev": prev_msg, "this": x})
                 m = f"unix/video offset was {unix_ofs:.3f}, new {new_ofs:.3f} at {unix:.3f} and {video:.3f}, diff {new_ofs - unix_ofs:.3f}"
                 if diff >= 60:
                     # Assume stream was offline when the gap is greater than a minute
@@ -842,6 +848,8 @@ def main():
         if ar.offset is not None:
             x["time_in_seconds"] += ar.offset
             x["time_text"] = tt(x["time_in_seconds"])
+
+        prev_msg = x
 
     if tjd:
         njd.extend(tjd)
@@ -1519,7 +1527,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             error(completed.stderr.decode("utf-8"))
             sys.exit(1)
 
-    # from pprint import pprint; pprint(msgs[-5:])
+    # pprint(msgs[-5:])
     t1_main = time.time()
     info(f"finished in {t1_main-t0_main:.2f} sec")
 
