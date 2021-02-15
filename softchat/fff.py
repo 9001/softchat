@@ -22,10 +22,11 @@ def gen_fonts(emotes, font_fn, font_name):
         if not os.path.exists(src_fn):
             raise Exception("not found: " + src_fn)
 
-        debug("src: " + src_fn)
-        g.importOutlines(src_fn)
-        if not src_fn.endswith(".svg"):
-            g.autoTrace()
+        if font_fn:
+            debug("src: " + src_fn)
+            g.importOutlines(src_fn)
+            if not src_fn.endswith(".svg"):
+                g.autoTrace()
 
         # Lie about their width as a hacky way to give them some breathing room.
         # Could do better, maybe will, but good enough for now.
@@ -37,8 +38,10 @@ def gen_fonts(emotes, font_fn, font_name):
             shortcuts[s] = chr(point)
         point += 1
 
-    font.correctDirection()
-    font.generate(font_fn)
+    if font_fn:
+        font.correctDirection()
+        font.generate(font_fn)
+
     return shortcuts
 
 
