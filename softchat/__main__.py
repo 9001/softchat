@@ -1227,14 +1227,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 bgr_nick = f"{r:02x}{g:02x}{b:02x}"  # and its gonna stay that way
                 colormap[nick] = bgr_nick
 
+            # defaults from ass header
+            bord = 2
+            shad = 1
+
             shrimp = None
             bgr_msg = bgr_nick
             bgr_fg = "ffffff"
             if "shrimp" in msg:
+                bord = shad = 4
                 bgr_fg = "000000"
                 bgr_msg = msg["color"]
                 bgr_msg = f"{bgr_msg[4:6]}{bgr_msg[2:4]}{bgr_msg[0:2]}"  # thx ass
-                shrimp = rf"{{\bord4\shad4\3c&H{bgr_msg}&\c&H{bgr_fg}&}}{msg['shrimp']}"
+                shrimp = rf"{{\bord{bord}\shad{shad}\3c&H{bgr_msg}&\c&H{bgr_fg}&}}{msg['shrimp']}"
 
             nick = assan(nick)
             msg["txt"] = [assan(x) for x in msg["txt"]]
@@ -1320,9 +1325,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     w += h * 4  # donation is not included, TODO maybe
 
                 if "badges" in msg and "Moderator" in msg["badges"]:
-                    txt = rf"{{\bord24\shad6}}*{{\bord6}}{txt}"
+                    bord = shad = 6
+                    txt = rf"{{\bord24\shad{shad}}}*{{\bord{bord}}}{txt}"
                 elif msg["uid"] in vips:
-                    txt = rf"{{\bord16\shad4}}_{{\bord4}}{txt}"
+                    bord = shad = 4
+                    txt = rf"{{\bord16\shad{shad}}}_{{\bord{bord}}}{txt}"
 
                 len_boost = 0.7
                 td = (vw + w - w * len_boost) * shrimp_mul / ar.spd
@@ -1491,7 +1498,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
                                 scx = int(len(emotes) * 173.0 - 20)
                                 sp = ar.sz / 1.57  # was supposed to be 1.48 ah whatever
-                                txt2 += rf"{{\\c&H{bgr_msg}\\1a&H20&\\fscx{scx}\\fsp-{sp}}}█{{\\fscx100\\fsp0\\c&H{bgr_fg}\\1a&H00&}}{emotes}"
+                                txt2 += rf"{{\\c&H{bgr_msg}\\fscx{scx}\\fsp-{sp}}}█{{\\fscx100\\fsp0\\c&H{bgr_fg}\\1a&H00&\\bord1\\shad0}}{emotes}{{\\bord{bord}\\shad{shad}}}"
                                 emotes = ""
                             if u:
                                 txt2 += c
