@@ -571,8 +571,8 @@ def generate_font_with_ffpython(*args):
     return json.loads(ret)
 
 
-def generate_font(emotes, font_fn, font_name):
-    args = [emotes, font_fn, font_name]
+def generate_font(emotes, font_fn, font_name, dont_write):
+    args = [emotes, font_fn, font_name, dont_write]
     if HAVE_FONTFORGE is not True:
         return generate_font_with_ffpython(*args)
 
@@ -783,15 +783,11 @@ def main():
         info(f"Generating custom font with {len(emotes)} emotes")
         cache_emotes(emotes, emote_dir, ar.emote_refilter)
 
-        # debug: don't generate the font itself (saves time)
-        if ar.emote_nofont:
-            font_fn = None
-
         # Try to avoid collisions if someone does install these as system fonts.
         font_hash = hashlib.sha512(ar.fn[0].encode("utf-8")).digest()
         font_hash = base64.urlsafe_b64encode(font_hash)[:16].decode("ascii")
         font_name = f"SoftChat Custom Emotes {font_hash}"
-        emote_shortcuts = generate_font(emotes, font_fn, font_name)
+        emote_shortcuts = generate_font(emotes, font_fn, font_name, ar.emote_nofont)
 
     use_018 = "; please use softchat v0.18 or older if your chat json was created with a chat_replay_downloader from before 2021-01-29-something"
     if not jd:
@@ -1481,24 +1477,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                             emotes += c
                         else:
                             if emotes:
-                                # aegisub @fs64/arial:
-                                #   {\pos(640,300)}|{\c&H660000&}██████{\fsp-260} {\fsp0\c}あああああ|
-                                #   {\pos(640,400)}|あああああ|
-                                # 6*█ @fs64 == fsp-262,  fsp=fs*(nblk/1.5) ..roughly
-                                #
-                                # aegisub @fs256/arial:
-                                #   {\pos(128,256)}|{\c&H660000&\fscx558\fsp-162}█{\fscx100\fsp0\c}田田田田|
-                                #   {\pos(128,480)}|田田田田|
-                                # 4 emotes == fscx558 fsp-162 == fscx(fs*2.18), whatever
-                                #
-                                # aegisub @fs256/noto-cjk-jp:
-                                #   {\pos(128,256)}|{\c&H660000&\fscx400\fsp-173}█{\fscx100\fsp0\c}龖龖龖龖|
-                                #   {\pos(128,480)}|龖龖龖龖|
-                                # 4 emotes == fscx400 fsp-173 == yoooo
+                                # aegisub @fs200/emotefont:
+                                #   {\pos(620,500)}|{\c&H660000&\fscx442\fsp-220}{\fscx100\fsp0\c}龖龖{\c&H0000FF&\1a&HBF&}龖龖龖|
+                                #   {\pos(620,720)}|龖龖龖龖龖|
 
-                                scx = int(len(emotes) * 173.0 - 20)
-                                fsp = ar.sz / 1.57  # was supposed to be 1.48 ah whatever
-                                txt2 += rf"{{\\c&H{bgr_msg}\\fscx{scx}\\fsp-{fsp}}}█{{\\fscx100\\fsp0\\c&H{bgr_fg}\\1a&H00&\\bord1\\shad0}}{emotes}{{\\bord{bord}\\shad{shad}}}"
+                                # emote font size
+                                fsz = ar.sz
+
+                                # compensate the 1100 padding in fff by subtracting a constant,
+                                scx = int(len(emotes) * 110) - 4  # ~109 otherwise
+
+                                # and bump this a bit to shift some of the padding to the left
+                                fsp = fsz / 0.92  # 0.9091
+
+                                txt2 += f"{{\\c&H{bgr_msg}\\fscx{scx}\\fsp-{fsp}}}\ue000{{\\fscx100\\fsp0\\c&H{bgr_fg}\\1a&H00&\\bord1\\shad0}}{emotes}{{\\bord{bord}\\shad{shad}}}"
                                 emotes = ""
                             if u:
                                 txt2 += c
