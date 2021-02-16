@@ -48,6 +48,7 @@ The fonts produced by `--emote_font` need to be installed as system fonts or emb
 
 Override automatically vectorized emotes by creating a ".manual.svg" file in the cache directory. So for the emote `UCS9uQI-jC3DE0L4IpXyvr6w_Do6dXuL6LZCQ_AP4-buoDQ` create the file `UCS9uQI-jC3DE0L4IpXyvr6w_Do6dXuL6LZCQ_AP4-buoDQ.manual.svg`. This can be used for emotes where the automatic version is of low quality.
 
+Similarly, rather than using `--emote_fill` to fill the background of all emotes, you can create an empty file named `UCS9uQI-jC3DE0L4IpXyvr6w_Do6dXuL6LZCQ_AP4-buoDQ.bg` to enable bg-fill for just that one emote.
 
 # about
 
@@ -55,11 +56,6 @@ Override automatically vectorized emotes by creating a ".manual.svg" file in the
 
 * moderator messages are emphasized  
   (larger outline, and prefixed with a ball)
-
-* the `--emote_fill` option will fill the background of all emotes,  
-  but you can choose to fill just a list of emotes by enabling  
-  `--emote_cache emotes` instead and creating blank files inside  
-  the `emotes` dir, named after each emote but with `.bg` as extension
 
 * mode 1, sidebar chat, creates a huge amount of subtitle events  
   which many media players (including mpv) will struggle with
