@@ -611,7 +611,6 @@ def main():
     ap.add_argument("-m", metavar="MODE", type=int, default=1, help="mode, 1=box, 2=danmaku")
     ap.add_argument("-r", metavar="WxH", type=str, default="1280x720", help="video res")
     ap.add_argument("-b", metavar="WxH+X+Y", type=str, default=None, help="subtitle area")
-    ap.add_argument("-f", action="store_true", help="fill chat background")
     ap.add_argument("--sz", metavar="POINTS", type=int, default=0, help="font size")
     ap.add_argument("--spd", metavar="SPEED", type=int, default=256, help="[danmaku] pixels/sec")
     ap.add_argument("--spread", action="store_true", help="[danmaku] even distribution")
@@ -1154,11 +1153,6 @@ def main():
         # if n_msg > 5000:  # opt
         #    break
 
-    if ar.f:
-        opts = {"back": "80", "shad": "ff", "opaq": "3"}
-    else:
-        opts = {"back": "00", "shad": "80", "opaq": "1"}
-
     vis = []
     if ar.fn[0].lower().endswith(".json"):
         out_fn = ar.fn[0][:-5] + ".ass"
@@ -1186,12 +1180,12 @@ Video Zoom Percent: 1.000000
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: a,{font},{sz},&H00FFFFFF,&H000000FF,&H{back}000000,&H{shad}000000,0,0,0,0,100,100,0,0,{opaq},2,1,1,0,0,0,1
+Style: a,{font},{sz},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,1,1,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """.format(
-                vw=vw, vh=vh, sz=ar.sz, font=font_name, **opts
+                vw=vw, vh=vh, sz=ar.sz, font=font_name
             ).encode(
                 "utf-8"
             )
