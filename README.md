@@ -56,9 +56,9 @@ Override automatically vectorized emotes by creating a ".manual.svg" file in the
 * moderator messages are emphasized  
   (larger outline, and prefixed with a ball)
 
-* the `--emote_fill` option will fill the background of all emotes,
-  but you can choose to fill just a list of emotes by enabling
-  `--emote_cache emotes` instead and creating blank files inside
+* the `--emote_fill` option will fill the background of all emotes,  
+  but you can choose to fill just a list of emotes by enabling  
+  `--emote_cache emotes` instead and creating blank files inside  
   the `emotes` dir, named after each emote but with `.bg` as extension
 
 * mode 1, sidebar chat, creates a huge amount of subtitle events  

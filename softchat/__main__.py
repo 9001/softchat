@@ -1541,42 +1541,32 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         error("you requested --embed_files but the media file could not be located")
     elif ar.embed_files:
         split = media_fn.rsplit(".", 1)
-        merged_fn = media_fn.rsplit(".", 1)[0] + ".softchat-merged.mkv"
+        merged_fn = split[0] + ".softchat-merged.mkv"
         info(f"Producing merged file {merged_fn}.")
 
+        # fmt: off
         cmd = [
             "ffmpeg",
             "-hide_banner",
-            "-i",
-            media_fn,
-            "-i",
-            out_fn,
-            "-map",
-            "0:v",
-            "-map",
-            "0:a",
-            "-map",
-            "1",
-            "-t",
+            "-i", media_fn,
+            "-i", out_fn,
+            "-map", "0:v",
+            "-map", "0:a",
+            "-map", "1",
             # Subtitles will still run longer than the video due to in-progress
             # animations past the end of the video, but only about 10 seconds
             # unless there's a poorly timed superchat.
-            str(v_dur),
-            "-codec",
-            "copy",
-            "-disposition:s:0",
-            "default",
+            "-t", str(v_dur),
+            "-codec", "copy",
+            "-disposition:s:0", "default",
         ]
 
         if ar.emote_font:
-            cmd.extend(
-                [
-                    "-attach",
-                    font_fn,
-                    "-metadata:s:t",
-                    "mimetype=application/x-truetype-font",
-                ]
-            )
+            cmd.extend([
+                "-attach", font_fn,
+                "-metadata:s:t", "mimetype=application/x-truetype-font",
+            ])
+        # fmt: on
 
         cmd.extend([merged_fn, "-y"])
 
