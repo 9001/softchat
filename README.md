@@ -50,6 +50,12 @@ Override automatically vectorized emotes by creating a ".manual.svg" file in the
 
 Similarly, rather than using `--emote_fill` to fill the background of all emotes, you can create an empty file named `UCS9uQI-jC3DE0L4IpXyvr6w_Do6dXuL6LZCQ_AP4-buoDQ.bg` to enable bg-fill for just that one emote.
 
+
+# bugs
+
+* `--emote_sz 3` and higher makes things collide (wontfix probably)
+
+
 # about
 
 * superchats will display for 2x the time and with inverted colors

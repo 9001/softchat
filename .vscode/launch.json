@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "run softchat",
+            "type": "python",
+            "request": "launch",
+            "module": "softchat",
+            "cwd": "/Users/ed/yt",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "-m2",
+                "--emote_sz",
+                "2",
+                "--emote_font",
+                "--emote_fill",
+                "--emote_cache",
+                "emotes",
+                "グレゴリオ _古川本舗 　covered by アルス・アルマル-XyL6bhHsNhQ.json"
+            ]
+        }
+    ]
+}
