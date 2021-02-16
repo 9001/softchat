@@ -507,8 +507,11 @@ def cache_emotes(emotes, emote_dir, overwrite):
                 fname = source_fname + ".svg"
 
         e["filename"] = os.path.abspath(fname)
-        manual_fname = source_fname + ".manual.svg"
 
+        fill_fname = source_fname + ".bg"
+        e["fill"] = os.path.exists(fill_fname)
+
+        manual_fname = source_fname + ".manual.svg"
         if os.path.isfile(manual_fname):
             debug(f"Using {e['name']:14} {manual_fname}")
             e["filename"] = os.path.abspath(manual_fname)
@@ -779,6 +782,7 @@ def main():
 
     font_fn = ar.fn[0].rsplit(".", 1)[0] + ".ttf"
     emote_shortcuts = dict()
+    filled_emotes = []
     if ar.emote_font:
         info(f"Generating custom font with {len(emotes)} emotes")
         cache_emotes(emotes, emote_dir, ar.emote_refilter)
@@ -787,7 +791,10 @@ def main():
         font_hash = hashlib.sha512(ar.fn[0].encode("utf-8")).digest()
         font_hash = base64.urlsafe_b64encode(font_hash)[:16].decode("ascii")
         font_name = f"SoftChat Custom Emotes {font_hash}"
-        emote_shortcuts = generate_font(emotes, font_fn, font_name, ar.emote_nofont)
+        emote_shortcuts, filled_emotes = generate_font(
+            emotes, font_fn, font_name, ar.emote_nofont
+        )
+        filled_emotes = set(filled_emotes)
 
     use_018 = "; please use softchat v0.18 or older if your chat json was created with a chat_replay_downloader from before 2021-01-29-something"
     if not jd:
@@ -1465,7 +1472,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                                 best = this
                                 y = y1 - h
 
-                if has_emotes and ar.emote_fill:
+                if has_emotes and (ar.emote_fill or filled_emotes):
                     # txt = rf"{{\clip(1,m 0 0 l 1000 0 1000 1000 0 1000)}}" + txt
                     # txt = rf"{{\clip(0,0,700,700)}}" + txt
                     # you can't \move a \clip sick there goes that idea
@@ -1473,7 +1480,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     emotes = ""
                     for c, u in list(zip(txt, [ord(x) for x in txt])) + [[None, 0]]:
                         is_emote = u >= 0xE000 and u <= 0xF8FF
-                        if is_emote:
+                        if is_emote and (ar.emote_fill or c in filled_emotes):
                             emotes += c
                         else:
                             if emotes:

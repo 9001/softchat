@@ -37,6 +37,7 @@ def gen_fonts(emotes, font_fn, font_name, dont_write):
     g.width = 1100
     point += 1
 
+    filled_emotes = []
     for e in emotes.values():
         g = font.createChar(point)
         src_fn = e["filename"]
@@ -56,7 +57,12 @@ def gen_fonts(emotes, font_fn, font_name, dont_write):
         for s in e["shortcuts"]:
             if s in shortcuts:
                 warn("Found duplicate emote shortcut " + s)
-            shortcuts[s] = chr(point)
+
+            ch = chr(point)
+            shortcuts[s] = ch
+            if e["fill"]:
+                filled_emotes.append(ch)
+
         point += 1
 
     if not dont_write:
@@ -64,7 +70,7 @@ def gen_fonts(emotes, font_fn, font_name, dont_write):
         font.generate(font_fn)
 
     os.unlink(blk_svg)
-    return shortcuts
+    return [shortcuts, filled_emotes]
 
 
 def main():
