@@ -650,6 +650,7 @@ def main():
     ap.add_argument("--media", metavar="MEDIA", type=str, default=None, help="The video file for the stream. Passing this is optional since it will be detected automatically if it shares a name with the chat replay file.")
     ap.add_argument("--emote_chat_file", metavar="EMOTE_DUMP", type=str, default=None, help="You probably don't need this. A chat file for another stream including emotes, for use with legacy chat files that do not include emotes when it's impossible to get a new chat replay download.")
     ap.add_argument("--emote_nofont", action="store_true", help="[DEBUG] disable font generation")
+    ap.add_argument("--emote_noinstall", action="store_true", help="don't copy fonts into the mpv fonts direcotry")
     ap.add_argument("fn", metavar="JSON_FILE", nargs="+")
     ar = ap.parse_args()
     # fmt: on
@@ -1578,6 +1579,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         warn(cdur_err)
     else:
         info(cdur_msg)
+
+    if ar.emote_font and not ar.emote_noinstall and not ar.emote_nofont:
+        if WINDOWS:
+            mpv_dir = os.path.expandvars(r"%appdata%/mpv")
+        else:
+            mpv_dir = os.path.expanduser(r"~/.config/mpv")
+
+        if not os.path.exists(mpv_dir):
+            warn(f"to enable emote font installation, create directory [{mpv_dir}/]")
+        else:
+            mpv_fontdir = os.path.join(mpv_dir, "fonts")
+            try:
+                os.mkdir(mpv_fontdir)
+            except FileExistsError:
+                pass
+
+            shutil.copy2(font_fn, mpv_fontdir)
+            info(f"emote font installed to [{mpv_fontdir}/]")
 
     if ar.embed_files and not media_fn:
         error("you requested --embed_files but the media file could not be located")
