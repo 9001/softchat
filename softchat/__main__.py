@@ -29,7 +29,7 @@ import subprocess as sp
 from PIL import ImageFont, ImageDraw, Image
 from .util import debug, info, warn, error, init_logger
 from .util import WINDOWS
-from .util import shell_esc, zopen, test_zopen
+from .util import shell_esc, zopen
 
 
 try:
@@ -1534,10 +1534,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                                     sz1 = sz2 = ""
 
                                 # compensate the 1100 padding in fff by subtracting a constant,
-                                scx = int(len(emotes) * 110) - 4  # ~109 otherwise
+                                scx = int(len(emotes) * 110) - 10  # ~109 otherwise
 
                                 # and bump this a bit to shift some of the padding to the left
-                                fsp = esz / 0.92  # 0.9091
+                                fsp = esz / 0.9111  # 0.9091
 
                                 txt2 += f"{{\\c&H{bgr_msg}\\fscx{scx}\\fsp-{fsp}{sz1}}}\ue000{{\\fscx100\\fsp0\\c&H{bgr_fg}\\1a&H00&\\bord1\\shad0}}{emotes}{{\\bord{bord}\\shad{shad}{sz2}}}"
                                 emotes = ""
