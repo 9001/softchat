@@ -29,7 +29,7 @@ import subprocess as sp
 from PIL import ImageFont, ImageDraw, Image
 from .util import debug, info, warn, error, init_logger
 from .util import WINDOWS
-from .util import shell_esc
+from .util import shell_esc, zopen, test_zopen
 
 
 try:
@@ -702,7 +702,7 @@ def main():
     seen = set()
     for fn in ar.fn:
         info(f"loading {fn}")
-        with open(fn, "r", encoding="utf-8") as f:
+        with zopen(fn, "r", encoding="utf-8") as f:
             err = None
             try:
                 jd2 = json.load(f)
@@ -762,7 +762,7 @@ def main():
     if ar.emote_chat_file is not None:
         info(f"loading emotes from {ar.emote_chat_file}")
 
-        with open(ar.emote_chat_file, "r", encoding="utf-8") as f:
+        with zopen(ar.emote_chat_file, "r", encoding="utf-8") as f:
             err = None
             try:
                 jd2 = json.load(f)
