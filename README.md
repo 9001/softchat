@@ -44,7 +44,7 @@ additionally, on windows you *may* need to `--vo=direct3d` and *not* fullscreen 
 2. doesn't make the text blurry
 3. doesn't make the text jitter
 
-The fonts produced by `--emote_font` need to be somewhere your media player can see them (either embedded, or in some autoload folder, or installed as system fonts). For this reason they will autoinstall to `~/.config/mpv/fonts/` (Linux/macos) or `%appdata%\mpv\fonts` (windows) for local playback using mpv. For other media players, or if you intend to share the subtitles, you should use `--embed_files` as each font is specific to that particular subtitle file and they need to be used together.
+The fonts produced by `--emote_font` need to be somewhere your media player can see them (either embedded, or in some autoload folder, or installed as system fonts). Set `--emote_install` to install fonts into `~/.config/mpv/fonts/` (Linux/macos) or `%appdata%\mpv\fonts` (windows) for local playback using mpv. For other media players, or if you intend to share the subtitles, you should use `--embed_files` as each font is specific to that particular subtitle file and they need to be used together.
 
 Override automatically vectorized emotes by creating a ".manual.svg" file in the cache directory. So for the emote `UCS9uQI-jC3DE0L4IpXyvr6w_Do6dXuL6LZCQ_AP4-buoDQ` create the file `UCS9uQI-jC3DE0L4IpXyvr6w_Do6dXuL6LZCQ_AP4-buoDQ.manual.svg`. This can be used for emotes where the automatic version is of low quality.
 
