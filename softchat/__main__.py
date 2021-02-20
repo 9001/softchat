@@ -391,7 +391,7 @@ def get_ff_dur(fn):
                 "ffprobe",
                 "-hide_banner",
                 "-v",
-                "warning",
+                "error",
                 "-select_streams",
                 "v:0",
                 "-show_entries",
@@ -416,7 +416,7 @@ def get_ff_dur(fn):
                 "ffprobe",
                 "-hide_banner",
                 "-v",
-                "warning",
+                "error",
                 "-select_streams",
                 "v:0",
                 "-show_entries",
@@ -433,7 +433,7 @@ def get_ff_dur(fn):
                 "ffprobe",
                 "-hide_banner",
                 "-v",
-                "warning",
+                "error",
                 "-show_entries",
                 "format=duration",
                 "-of",
@@ -855,6 +855,14 @@ def main():
     for x in jd:
         unix = x["timestamp"] / 1_000_000.0
         t = x.get("time_in_seconds", None)
+
+        # Superchats have bizarre time_in_seconds that can be off by multiple
+        # minutes from when the superchat was originally displayed while the
+        # stream was live.
+        # At least for now, ignore time_in_seconds for SCs.
+        if "amount" in x or "money" in x:
+            t = None
+
         if t is None:
             n_interp += 1
             sec = unix - unix_ofs
