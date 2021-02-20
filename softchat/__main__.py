@@ -744,7 +744,11 @@ def main():
                 if (
                     at != "add_chat_item"
                     or m.get("author", {}).get("id", None) is None
-                    or (m.get("message", False) is False and "amount" not in m and "money" not in m)
+                    or (
+                        m.get("message", False) is False
+                        and "amount" not in m
+                        and "money" not in m
+                    )
                 ):
                     continue
 
@@ -801,6 +805,7 @@ def main():
         info("No emotes found")
         ar.emote_font = False
 
+    font_name = "Squished Noto Sans CJK JP Regular"
     font_fn = ar.fn[0].rsplit(".", 1)[0] + ".ttf"
     emote_shortcuts = dict()
     filled_emotes = []
