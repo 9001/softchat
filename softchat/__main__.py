@@ -744,7 +744,7 @@ def main():
                 if (
                     at != "add_chat_item"
                     or m.get("author", {}).get("id", None) is None
-                    or (m.get("message", False) is False and "amount" not in m)
+                    or (m.get("message", False) is False and "amount" not in m and "money" not in m)
                 ):
                     continue
 
@@ -861,13 +861,12 @@ def main():
             x["time_in_seconds"] = sec
             x["time_text"] = tt(sec)
             tjd.append(x)
-        elif t >= 10 and "amount" not in x:
+        elif t >= 10 and "amount" not in x and "money" not in x:
             njd.append(x)
             video = t
             new_ofs = unix - video
             diff = abs(new_ofs - unix_ofs)
             if diff >= 10:
-                pprint.pprint({"prev": prev_msg, "this": x})
                 m = f"unix/video offset was {unix_ofs:.3f}, new {new_ofs:.3f} at {unix:.3f} and {video:.3f}, diff {new_ofs - unix_ofs:.3f}"
                 if diff >= 60:
                     # Assume stream was offline when the gap is greater than a minute
@@ -877,6 +876,7 @@ def main():
                     warn(m)
                 else:
                     warn(m + ", probably fine")
+                pprint.pprint({"prev": prev_msg, "this": x})
 
             unix_ofs = new_ofs
             if tjd:
@@ -1029,7 +1029,7 @@ def main():
     info("converting")
     for n_msg, msg in enumerate(jd):
         txt = msg.get("message", "") or ""
-        if "amount" not in msg and txt == "":
+        if "amount" not in msg and "money" not in msg and txt == "":
             txt = "--"
 
         t_fsec = msg["time_in_seconds"]
@@ -1171,8 +1171,8 @@ def main():
             "msg_emotes": msg_emotes,
         }
 
-        if "amount" in msg:
-            o["shrimp"] = msg["amount"]
+        if "amount" in msg or "money" in msg:
+            o["shrimp"] = msg["money"]["text"] if "money" in msg else msg["amount"]
             color = None
             for k in [
                 "body_background_colour",
