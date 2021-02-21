@@ -43,6 +43,13 @@ except ImportError:
 if __name__ == "__main__":
     init_logger("-d" in sys.argv)
 
+message_translation_table = "".maketrans(
+    "",
+    "",
+    # Skin tone modifiers do not render in subtitles.
+    "🏻🏼🏽🏾🏿",
+)
+
 
 try:
     # help python find libmecab.dll, adjust this to fit your env if necessary
@@ -1042,6 +1049,7 @@ def main():
     info("converting")
     for n_msg, msg in enumerate(jd):
         txt = msg.get("message", "") or ""
+        txt = txt.translate(message_translation_table)
         if "amount" not in msg and "money" not in msg and txt == "":
             txt = "--"
 
