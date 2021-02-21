@@ -1,4 +1,4 @@
-#! /usr/bin/python3
+#! /usr/bin/env python3
 # Script that compares two live chat dumps of the same stream to determine
 # roughly how many messages are missing from the replay.
 

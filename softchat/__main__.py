@@ -1158,7 +1158,7 @@ def main():
         sx, sy = vsz
         sy = int(sy + fofs * 2.5 + 0.8)
 
-        if n_msg % 100 == 0:
+        if n_msg % 1000 == 0:
             info(
                 "  {} / {}   {}%   {}   {}\n   {}\n".format(
                     n_msg,
