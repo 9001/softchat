@@ -659,6 +659,7 @@ def main():
     ap.add_argument("--emote_chat_file", metavar="EMOTE_DUMP", type=str, default=None, help="You probably don't need this. A chat file for another stream including emotes, for use with legacy chat files that do not include emotes when it's impossible to get a new chat replay download.")
     ap.add_argument("--emote_nofont", action="store_true", help="[DEBUG] disable font generation")
     ap.add_argument("--emote_install", action="store_true", help="install emote fonts into media player folders")
+    ap.add_argument("--emote_install_dir", type=str, default=None, help="Optional directory to install fonts, if not present will try to determine a default system location.")
     ap.add_argument("fn", metavar="JSON_FILE", nargs="+")
     ar = ap.parse_args()
     # fmt: on
@@ -1603,22 +1604,32 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         info(cdur_msg)
 
     if ar.emote_font and ar.emote_install:
-        if WINDOWS:
-            mpv_dir = os.path.expandvars(r"%appdata%/mpv")
+        fontdir = None
+        if ar.emote_install_dir:
+            fontdir = ar.emote_install_dir
         else:
-            mpv_dir = os.path.expanduser(r"~/.config/mpv")
+            if WINDOWS:
+                mpv_dir = os.path.expandvars(r"%appdata%/mpv")
+            else:
+                mpv_dir = os.path.expanduser(r"~/.config/mpv")
 
-        if not os.path.exists(mpv_dir):
-            warn(f"to enable emote font installation, create directory {mpv_dir}/")
-        else:
-            mpv_fontdir = os.path.join(mpv_dir, "fonts")
-            try:
-                os.mkdir(mpv_fontdir)
-            except FileExistsError:
-                pass
+            if not os.path.exists(mpv_dir):
+                warn(f"to enable emote font installation, create directory {mpv_dir}/")
+            else:
+                fontdir = os.path.join(mpv_dir, "fonts")
 
-            shutil.copy2(font_fn, mpv_fontdir)
-            info(f"emote font installed to {mpv_fontdir}/")
+        if fontdir:
+            if os.path.exists(fontdir) and not os.path.isdir(fontdir):
+                error(f"Requested font installation, but {fontdir} is not a directory")
+                fontdir = None
+            elif not os.path.exists(fontdir):
+                os.mkdir(fontdir)
+
+        if fontdir:
+            shutil.copy2(font_fn, fontdir)
+            info(f"emote font installed to {fontdir}")
+            if ar.cleanup and not ar.embed_files:
+                os.remove(font_fn)
 
     if ar.embed_files and not media_fn:
         error("you requested --embed_files but the media file could not be located")
