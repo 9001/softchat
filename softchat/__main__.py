@@ -16,6 +16,7 @@ import sys
 import time
 import json
 import zlib
+import shlex
 import base64
 import random
 import requests
@@ -1227,6 +1228,7 @@ def main():
             """\
 [Script Info]
 Title: https://ocv.me/dev/?softchat.py
+; {cmd}
 ScriptType: v4.00+
 WrapStyle: 0
 ScaledBorderAndShadow: yes
@@ -1247,7 +1249,7 @@ Style: a,{font},{sz},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """.format(
-                vw=vw, vh=vh, sz=ar.sz, font=font_name
+                vw=vw, vh=vh, sz=ar.sz, font=font_name, cmd=" ".join(map(shlex.quote, sys.argv[1:]))
             ).encode(
                 "utf-8"
             )
