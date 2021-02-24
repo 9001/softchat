@@ -682,6 +682,31 @@ def main():
             error(f"you requested --emote_font but {err} is not installed")
             sys.exit(1)
 
+    media_fn = None
+    if ar.media and os.path.isfile(ar.media):
+        media_fn = ar.media
+    else:
+        for ext in ["webm", "mp4", "mkv"]:
+            f = ar.fn[0]
+            while not media_fn and "." in f:
+                f = f.rsplit(".", 1)[0]
+                mfn = f + "." + ext
+                if os.path.isfile(mfn):
+                    media_fn = mfn
+                    break
+
+                mfn = os.path.join(os.getcwd(), os.path.split(mfn)[1])
+                if os.path.isfile(mfn):
+                    media_fn = mfn
+                    break
+
+    base_fn = ar.fn[0].rsplit(".json", 1)[0]
+    if media_fn:
+        base_fn = media_fn.rsplit(".", 1)[0]
+
+    out_fn = base_fn + ".ass"
+    font_fn = base_fn + ".ttf"
+
     emote_dir = "emotes"
     if ar.emote_cache:
         emote_dir = ar.emote_cache
@@ -816,7 +841,6 @@ def main():
         ar.emote_font = False
 
     font_name = "Squished Noto Sans CJK JP Regular"
-    font_fn = ar.fn[0].rsplit(".", 1)[0] + ".ttf"
     emote_shortcuts = dict()
     filled_emotes = []
     if ar.emote_font:
@@ -824,7 +848,7 @@ def main():
         cache_emotes(emotes, emote_dir, ar.emote_refilter)
 
         # Try to avoid collisions if someone does install these as system fonts.
-        font_hash = hashlib.sha512(ar.fn[0].encode("utf-8")).digest()
+        font_hash = hashlib.sha512(base_fn.encode("utf-8")).digest()
         font_hash = base64.urlsafe_b64encode(font_hash)[:16].decode("ascii")
         font_name = f"SoftChat Custom Emotes {font_hash}"
         emote_shortcuts, filled_emotes = generate_font(
@@ -962,19 +986,6 @@ def main():
     if len(droplist) > 0:
         info(f"Dropping {len(droplist)} duplicate chat entries within threshold")
     jd = [m for m in jd if m["message_id"] not in droplist]
-
-    media_fn = None
-    if ar.media and os.path.isfile(ar.media):
-        media_fn = ar.media
-    else:
-        for ext in ["webm", "mp4", "mkv"]:
-            f = ar.fn[0]
-            while not media_fn and "." in f:
-                f = f.rsplit(".", 1)[0]
-                mfn = f + "." + ext
-                if os.path.isfile(mfn):
-                    media_fn = mfn
-                    break
 
     cdur_msg = None
     cdur_err = "could not verify chat duration"
@@ -1217,10 +1228,6 @@ def main():
         #    break
 
     vis = []
-    if ar.fn[0].lower().endswith(".json"):
-        out_fn = ar.fn[0][:-5] + ".ass"
-    else:
-        out_fn = ar.fn[0] + ".ass"
 
     info(f"creating {out_fn}")
     with open(out_fn, "wb") as f:
@@ -1249,7 +1256,11 @@ Style: a,{font},{sz},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """.format(
-                vw=vw, vh=vh, sz=ar.sz, font=font_name, cmd=" ".join(map(shlex.quote, sys.argv[1:]))
+                vw=vw,
+                vh=vh,
+                sz=ar.sz,
+                font=font_name,
+                cmd=" ".join(map(shlex.quote, sys.argv[1:])),
             ).encode(
                 "utf-8"
             )
