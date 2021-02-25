@@ -563,6 +563,7 @@ def cache_emotes(emotes, emote_dir, overwrite):
                 # that are too high will destroy detail.
                 # There is no single best option for all emotes.
                 "-contrast-stretch", "3%x9%",
+                "-channel", "rgb",
                 "-negate",
                 fname,
             ])
