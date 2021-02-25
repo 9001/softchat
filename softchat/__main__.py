@@ -17,6 +17,7 @@ import time
 import json
 import zlib
 import shlex
+import string
 import base64
 import random
 import requests
@@ -707,6 +708,9 @@ def main():
 
     out_fn = base_fn + ".ass"
     font_fn = base_fn + ".ttf"
+    if WINDOWS:
+        allowed = string.ascii_letters + string.digits + ".,-"
+        font_fn = "".join([x if x in allowed else "_" for x in font_fn])
 
     emote_dir = "emotes"
     if ar.emote_cache:
