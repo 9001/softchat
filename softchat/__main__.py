@@ -32,6 +32,7 @@ from PIL import ImageFont, ImageDraw, Image
 from .util import debug, info, warn, error, init_logger
 from .util import WINDOWS
 from .util import shell_esc, zopen
+from .ass import assan, segment_msg, render_msegs
 
 
 try:
@@ -354,32 +355,6 @@ def tt(s):
     if h > 0:
         return "{:d}:{:02d}:{:02d}".format(h, m, s)
     return "{:d}:{:02d}".format(m, s)
-
-
-def assan(x):
-    # there is no standardization on escaping ["{", "}", "\\"]:
-    #   the commented one is for aegisub,
-    #   the enabled one is for mpv
-
-    # aegsiub:
-    # return x.replace("{", "<").replace("}", ">").replace('\\', '\\{}')
-
-    # mpv:
-    ret = ""
-    for c, nc in zip(x, x[1:] + "\n"):
-        if c == "{":
-            ret += "\\{"
-        elif c == "}":
-            ret += "\\}"
-        elif c == "\\" and nc in ["N", "n", "h"]:
-            ret += "\\\\"
-        else:
-            ret += c
-
-    # mpv:
-    #   there is no way to encode a literal \ before a markup {
-    #   so the lines must end with a whitespace
-    return ret + " "
 
 
 def get_ff_dur(fn):
@@ -1239,7 +1214,7 @@ def main():
         f.write(
             """\
 [Script Info]
-Title: https://ocv.me/dev/?softchat.py
+Title: https://github.com/9001/softchat
 ; {cmd}
 ScriptType: v4.00+
 WrapStyle: 0
@@ -1549,43 +1524,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                                 best = this
                                 y = y1 - h
 
-                if msg_emotes and (ar.emote_fill or filled_emotes):
-                    # txt = rf"{{\clip(1,m 0 0 l 1000 0 1000 1000 0 1000)}}" + txt
-                    # txt = rf"{{\clip(0,0,700,700)}}" + txt
-                    # you can't \move a \clip sick there goes that idea
-                    txt2 = ""
-                    emotes = ""
-                    for c, u in list(zip(txt, [ord(x) for x in txt])) + [[None, 0]]:
-                        is_emote = u >= 0xE000 and u <= 0xF8FF
-                        if is_emote and (ar.emote_fill or c in filled_emotes):
-                            emotes += c
-                        else:
-                            if emotes:
-                                # aegisub @fs200/emotefont:
-                                #   {\pos(620,500)}|{\c&H660000&\fscx442\fsp-220}{\fscx100\fsp0\c}龖龖{\c&H0000FF&\1a&HBF&}龖龖龖|
-                                #   {\pos(620,720)}|龖龖龖龖龖|
-
-                                # emote font size
-                                fsz = ar.sz
-                                if ar.emote_sz:
-                                    esz = fsz * ar.emote_sz
-                                    sz1 = f"\\fs{esz}"
-                                    sz2 = f"\\fs{fsz}"
-                                else:
-                                    esz = fsz
-                                    sz1 = sz2 = ""
-
-                                # compensate the 1100 padding in fff by subtracting a constant,
-                                scx = int(len(emotes) * 110) - 10  # ~109 otherwise
-
-                                # and bump this a bit to shift some of the padding to the left
-                                fsp = esz / 0.9111  # 0.9091
-
-                                txt2 += f"{{\\c&H{bgr_msg}\\fscx{scx}\\fsp-{fsp}{sz1}}}\ue000{{\\fscx100\\fsp0\\c&H{bgr_fg}\\1a&H00&\\bord1\\shad0}}{emotes}{{\\bord{bord}\\shad{shad}{sz2}}}"
-                                emotes = ""
-                            if u:
-                                txt2 += c
-                    txt = txt2
+                if msg_emotes and (
+                    ar.emote_fill or filled_emotes or ar.emote_sz > 1.01
+                ):
+                    msegs = segment_msg(txt, ar.emote_fill, filled_emotes)
+                    txt = render_msegs(
+                        msegs, ar.sz, ar.sz * ar.emote_sz, bgr_msg, bgr_fg, bord, shad
+                    )
 
                 y = int(y)
                 txt = rf"{{\move({vw},{y+h},{-w},{y+h})\3c&H{bgr_nick}&}}{txt}{{\fscx40\fscy40\bord1}}\N{nick}"

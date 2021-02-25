@@ -20,6 +20,12 @@
                 "emotes",
                 "グレゴリオ _古川本舗 　covered by アルス・アルマル-XyL6bhHsNhQ.json"
             ]
+        },
+        {
+            "name": "run test",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest"
         }
     ]
 }
