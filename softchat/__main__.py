@@ -28,10 +28,11 @@ import argparse
 import tempfile
 import colorsys
 import threading
+import queue
 import multiprocessing
 import subprocess as sp
 from PIL import Image
-from .util import debug, info, load_fugashi, warn, error, init_logger
+from .util import debug, info, warn, error, init_logger
 from .util import WINDOWS, HAVE_FONTFORGE
 from .util import shell_esc, zopen, tt, hms, get_ff_dur, load_fugashi
 from .mproc import TextStuff, gen_msg_thr
@@ -1170,14 +1171,18 @@ def gen_msgs(jd, vw, bw, ar, emote_shortcuts, have_fugashi):
     if j == 0:
         j = os.cpu_count()
 
-    qi = multiprocessing.Queue(j * 4)
-    qo = multiprocessing.Queue()
-    a = (qi, qo, ar, vw, bw, emote_shortcuts, have_fugashi)
+    a = [ar, vw, bw, emote_shortcuts, have_fugashi]
     if j == 1:
+        qi = queue.Queue()
+        qo = queue.Queue()
+        a = tuple([qi, qo] + a)
         t = threading.Thread(target=gen_msg_thr, args=a)
         t.daemon = True
         t.start()
     else:
+        qi = multiprocessing.Queue(j * 4)
+        qo = multiprocessing.Queue()
+        a = tuple([qi, qo] + a)
         for _ in range(j):
             p = multiprocessing.Process(target=gen_msg_thr, args=a)
             p.start()

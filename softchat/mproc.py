@@ -2,7 +2,6 @@
 
 import re
 import os
-import sys
 import tempfile
 from multiprocessing import current_process
 from PIL import ImageFont, ImageDraw, Image
