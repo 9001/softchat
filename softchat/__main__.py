@@ -27,7 +27,6 @@ import shutil
 import argparse
 import tempfile
 import colorsys
-import threading
 import queue
 import multiprocessing
 import subprocess as sp
@@ -35,7 +34,7 @@ from PIL import Image
 from .util import debug, info, warn, error, init_logger
 from .util import WINDOWS, HAVE_FONTFORGE
 from .util import shell_esc, zopen, tt, hms, get_ff_dur, load_fugashi
-from .mproc import TextStuff, gen_msg_thr
+from .mproc import TextStuff, gen_msg_thr, gen_msg_initializer
 from .ass import assan, segment_msg, render_msegs
 
 
@@ -1171,55 +1170,14 @@ def gen_msgs(jd, vw, bw, ar, emote_shortcuts, have_fugashi):
     if j == 0:
         j = os.cpu_count()
 
-    a = [ar, vw, bw, emote_shortcuts, have_fugashi]
-    if j == 1:
-        qi = queue.Queue()
-        qo = queue.Queue()
-        a = tuple([qi, qo] + a)
-        t = threading.Thread(target=gen_msg_thr, args=a)
-        t.daemon = True
-        t.start()
-    else:
-        qi = multiprocessing.Queue(j * 4)
-        qo = multiprocessing.Queue()
-        a = tuple([qi, qo] + a)
-        for _ in range(j):
-            p = multiprocessing.Process(target=gen_msg_thr, args=a)
-            p.start()
+    initargs = [gen_msg_thr, ar, vw, bw, emote_shortcuts, have_fugashi]
 
-    rdy = {}
-    nxt = 0
-    for n_msg, msg in enumerate(jd):
-        qi.put([n_msg, msg], timeout=3)
-        if n_msg < j * 2:
-            continue
-
-        rv = qo.get(timeout=3)
-        n = rv[0]
-        if n != nxt:
-            rdy[n] = rv
-            if nxt in rdy:
-                rv = rdy.pop(nxt)
-            else:
-                # print("got {}, need {}, delta {}".format(n, nxt, n - nxt))
-                continue
-
-        nxt += 1
-        if len(rv) > 2:
-            yield rv
-
-    rem = list(rdy.values())
-    nxt += len(rem)
-    while nxt <= n_msg:
-        # print("[{}..{}..{}]".format(nxt, rem[-1][0] if rem else 0, n_msg))
-        rem.append(qo.get(timeout=3))
-        nxt += 1
-
-    for _ in range(j):
-        qi.put(None, timeout=3)
-
-    for rv in sorted(rem):
-        yield rv
+    with multiprocessing.Pool(j, initializer=gen_msg_initializer, initargs=initargs) as pool:
+        # Cannot return the generator directly, since the context manager will close the pool
+        # 100 was picked experimentally and seems to perform well for both 4c8t and 16c/32t.
+        for x in pool.imap(gen_msg_thr, enumerate(jd), 100):
+            if x:
+                yield x
 
 
 if __name__ == "__main__":

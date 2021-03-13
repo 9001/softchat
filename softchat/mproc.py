@@ -225,138 +225,143 @@ class TextStuff(object):
         return lines
 
 
-def gen_msg_thr(qi, qo, ar, vw, bw, emote_shortcuts, have_fugashi):
+def gen_msg_initializer(fn, ar, vw, bw, emote_shortcuts, have_fugashi):
+    fn.args = [ar, vw, bw, emote_shortcuts, have_fugashi]
+
     ptn_kanji = re.compile(r"[\u4E00-\u9FAF]")
     ptn_kana = re.compile(r"[\u3040-\u30FF]")
     ptn_ascii = re.compile(r"[a-zA-Z]")
     ptn_pre = re.compile(r"([　、。〇〉》」』】〕〗〙〛〜〞〟・…⋯！＂）＊－．／＞？＠＼］＿～｡｣･￭￮]+)")
     ptn_post = re.compile(r"([〈《「『【〔〖〘〚〝（＜［｀｢]+)")
 
-    z = TextStuff(ar.sz, ar.fontdir, ar.emote_sz)
+    fn.regs = [ptn_kanji, ptn_kana, ptn_ascii, ptn_pre, ptn_post]
+
+    fn.z = TextStuff(ar.sz, ar.fontdir, ar.emote_sz)
     if have_fugashi:
-        wakati, yomi = load_fugashi()
+        fn.wakati, fn.yomi = load_fugashi()
 
-    n_msg = -1
-    while True:
-        task = qi.get()
-        if not task:
-            info("bye from {} @ msg {}".format(current_process().name, n_msg))
-            break
 
-        n_msg, msg = task
+def gen_msg_thr(a):
+    n_msg, msg = a
+    [ar, vw, bw, emote_shortcuts, have_fugashi] = gen_msg_thr.args
+    [ptn_kanji, ptn_kana, ptn_ascii, ptn_pre, ptn_post] = gen_msg_thr.regs
 
-        txt = msg.get("message", "") or ""
-        txt = txt.translate(message_translation_table)
-        if "amount" not in msg and "money" not in msg and txt == "":
-            txt = "--"
+    z = gen_msg_thr.z
+    if have_fugashi:
+        wakati = gen_msg_thr.wakati
+        yomi = gen_msg_thr.yomi
 
-        t_fsec = msg["time_in_seconds"]
-        t_isec = int(t_fsec)
-        t_hms = msg["time_text"]
+    txt = msg.get("message", "") or ""
+    txt = txt.translate(message_translation_table)
+    if "amount" not in msg and "money" not in msg and txt == "":
+        txt = "--"
 
-        if t_hms.startswith("-") or t_isec < 0 or t_isec > 4096 * 4096:
-            qo.put([n_msg, None])
-            continue
+    t_fsec = msg["time_in_seconds"]
+    t_isec = int(t_fsec)
+    t_hms = msg["time_text"]
 
-        # time integrity check
-        try:
-            h, m, s = [int(x) for x in t_hms.split(":")]
-            t_isec2 = 60 * (60 * h + m) + s
-        except:
-            m, s = [int(x) for x in t_hms.split(":")]
-            t_isec2 = 60 * m + s
+    if t_hms.startswith("-") or t_isec < 0 or t_isec > 4096 * 4096:
+        return None
 
-        if int(t_fsec) != t_isec or t_isec != t_isec2:
-            # at some point, someone observed a difference between time_text
-            # and time_in_seconds, so please let me have a look at
-            # your chatlog json if you end up here
-            raise Exception(
-                f"time drift [{t_fsec}] [{t_isec}] [{t_isec2}] [{t_hms}]\n  (pls provide this chat-rip to ed)"
-            )
+    # time integrity check
+    try:
+        h, m, s = [int(x) for x in t_hms.split(":")]
+        t_isec2 = 60 * (60 * h + m) + s
+    except:
+        m, s = [int(x) for x in t_hms.split(":")]
+        t_isec2 = 60 * m + s
 
-        msg_emotes = []
-        if ":" in txt and ar.emote_font:
-            old_txt = txt
-            for k, v in emote_shortcuts.items():
-                txt = txt.replace(k, v)
+    if int(t_fsec) != t_isec or t_isec != t_isec2:
+        # at some point, someone observed a difference between time_text
+        # and time_in_seconds, so please let me have a look at
+        # your chatlog json if you end up here
+        raise Exception(
+            f"time drift [{t_fsec}] [{t_isec}] [{t_isec2}] [{t_hms}]\n  (pls provide this chat-rip to ed)"
+        )
+    msg_emotes = []
+    if ":" in txt and ar.emote_font:
+        old_txt = txt
+        for k, v in emote_shortcuts.items():
+            txt = txt.replace(k, v)
 
-            if txt != old_txt:
-                msg_emotes = [u for u in txt if ord(u) >= 0xE000 and ord(u) <= 0xF8FF]
+        if txt != old_txt:
+            msg_emotes = [u for u in txt if ord(u) >= 0xE000 and ord(u) <= 0xF8FF]
 
-        # wordwrap gets wonky when emotes are 2big
-        # so ensure whtiespace between text and emote regions
-        if msg_emotes and ar.emote_sz >= 1.5:
-            txt2 = ""
-            was_emote = False
-            for c, u in zip(txt, [ord(x) for x in txt]):
-                if u >= 0xE000 and u <= 0xF8FF:
-                    if not was_emote and txt2:
-                        txt2 += " "
-                    was_emote = True
-                else:
-                    if was_emote:
-                        was_emote = False
-                        txt2 += " "
-                txt2 += c
-            txt = txt2
+    # wordwrap gets wonky when emotes are 2big
+    # so ensure whtiespace between text and emote regions
+    if msg_emotes and ar.emote_sz >= 1.5:
+        txt2 = ""
+        was_emote = False
+        for c, u in zip(txt, [ord(x) for x in txt]):
+            if u >= 0xE000 and u <= 0xF8FF:
+                if not was_emote and txt2:
+                    txt2 += " "
+                was_emote = True
+            else:
+                if was_emote:
+                    was_emote = False
+                    txt2 += " "
+            txt2 += c
+        txt = txt2
 
-        n_ascii = len(ptn_ascii.findall(txt))
-        n_kanji = len(ptn_kanji.findall(txt))
-        n_kana = len(ptn_kana.findall(txt))
+    n_ascii = len(ptn_ascii.findall(txt))
+    n_kanji = len(ptn_kanji.findall(txt))
+    n_kana = len(ptn_kana.findall(txt))
 
-        # if the amount of ascii compared to kanji/kana
-        # is less than 30%, assume we'll need MeCab
-        is_jp = (n_kanji + n_kana) / (n_kanji + n_kana + n_ascii + 0.1) > 0.7
+    # if the amount of ascii compared to kanji/kana
+    # is less than 30%, assume we'll need MeCab
+    is_jp = (n_kanji + n_kana) / (n_kanji + n_kana + n_ascii + 0.1) > 0.7
 
-        # transcription from kanji to kana if requested
-        if ar.kana and is_jp and n_kanji:
-            txt2 = yomi.parse(txt)
-            txt = ""
-            for ch in txt2:
-                co = ord(ch)
-                # hiragana >= 0x3041 and <= 0x3096
-                # katakana >= 0x30a1 and <= 0x30f6
-                if co >= 0x30A1 and co <= 0x30F6:
-                    txt += chr(co - (0x30A1 - 0x3041))
-                else:
-                    txt += ch
+    # transcription from kanji to kana if requested
+    if ar.kana and is_jp and n_kanji:
+        txt2 = yomi.parse(txt)
+        txt = ""
+        for ch in txt2:
+            co = ord(ch)
+            # hiragana >= 0x3041 and <= 0x3096
+            # katakana >= 0x30a1 and <= 0x30f6
+            if co >= 0x30A1 and co <= 0x30F6:
+                txt += chr(co - (0x30A1 - 0x3041))
+            else:
+                txt += ch
 
-        if ar.m == 1:
-            wrap_width = bw
-        else:
-            # vsfilter wraps it anyways orz
-            wrap_width = vw / 2
+    if ar.m == 1:
+        wrap_width = bw
+    else:
+        # vsfilter wraps it anyways orz
+        wrap_width = vw / 2
 
-        if n_msg % 100 == 0 and len(z.cache) > 1024 * 64:
-            z.cache = {}
+    if n_msg % 100 == 0 and len(z.cache) > 1024 * 64:
+        z.cache = {}
 
-        # wrap to specified width
-        # by splitting on ascii whitespace
-        vtxt = z.unrag(txt, wrap_width, msg_emotes)
+    # wrap to specified width
+    # by splitting on ascii whitespace
+    vtxt = z.unrag(txt, wrap_width, msg_emotes)
+    vsz = z.vsize("\n".join(vtxt), msg_emotes)
+
+    if vsz[0] >= bw and is_jp:
+        # too wide, is japanese,
+        # try wrapping on japanese punctuation instead
+        vtxt = ptn_pre.sub("\\1\n", txt)
+        vtxt = ptn_post.sub("\n\\1", vtxt)
+        vtxt = vtxt.split("\n")
         vsz = z.vsize("\n".join(vtxt), msg_emotes)
 
-        if vsz[0] >= bw and is_jp:
-            # too wide, is japanese,
-            # try wrapping on japanese punctuation instead
-            vtxt = ptn_pre.sub("\\1\n", txt)
-            vtxt = ptn_post.sub("\n\\1", vtxt)
-            vtxt = vtxt.split("\n")
+        if vsz[0] >= bw and have_fugashi:
+            # still too wide, wrap on word-boundaries
+            vtxt = z.unrag(wakati.parse(txt), bw, msg_emotes)
+            vtxt = [x.replace(" ", "") for x in vtxt]
+
+            for n in range(1, len(vtxt)):
+                # move most punctuation to the prev line
+                ln = vtxt[n]
+                m = ptn_pre.search(ln)
+                if m and m.start() == 0:
+                    vtxt[n - 1] += ln[: m.end()]
+                    vtxt[n] = ln[m.end() :]
+
             vsz = z.vsize("\n".join(vtxt), msg_emotes)
 
-            if vsz[0] >= bw and have_fugashi:
-                # still too wide, wrap on word-boundaries
-                vtxt = z.unrag(wakati.parse(txt), bw, msg_emotes)
-                vtxt = [x.replace(" ", "") for x in vtxt]
+    vtxt = [x for x in vtxt if x.strip()]
 
-                for n in range(1, len(vtxt)):
-                    # move most punctuation to the prev line
-                    ln = vtxt[n]
-                    m = ptn_pre.search(ln)
-                    if m and m.start() == 0:
-                        vtxt[n - 1] += ln[: m.end()]
-                        vtxt[n] = ln[m.end() :]
-
-                vsz = z.vsize("\n".join(vtxt), msg_emotes)
-
-        vtxt = [x for x in vtxt if x.strip()]
-        qo.put([n_msg, msg, vtxt, vsz, t_fsec, t_hms, msg_emotes])
+    return [n_msg, msg, vtxt, vsz, t_fsec, t_hms, msg_emotes]
