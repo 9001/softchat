@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "1.0",
-    "date": "2021-02-22",
+    "version": "1.1",
+    "date": "2021-03-22",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -1172,7 +1172,9 @@ def gen_msgs(jd, vw, bw, ar, emote_shortcuts, have_fugashi):
 
     initargs = [gen_msg_thr, ar, vw, bw, emote_shortcuts, have_fugashi]
 
-    with multiprocessing.Pool(j, initializer=gen_msg_initializer, initargs=initargs) as pool:
+    with multiprocessing.Pool(
+        j, initializer=gen_msg_initializer, initargs=initargs
+    ) as pool:
         # Cannot return the generator directly, since the context manager will close the pool
         # 100 was picked experimentally and seems to perform well for both 4c8t and 16c/32t.
         for x in pool.imap(gen_msg_thr, enumerate(jd), 100):
