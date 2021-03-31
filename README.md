@@ -14,7 +14,7 @@
 
 windows users:
 * press Win+R and run `cmd` to get a terminal to run commands in (protip: rightclick to paste stuff)
-* replace `python3` with `python`
+* replace `python3` with `python` in all commands
 * see [common problems](#common-problems) if you run into issues
 
 
