@@ -13,8 +13,9 @@
 # howto
 
 windows users:
-* press Win+R and run `cmd` to get a terminal to run commands in
+* press Win+R and run `cmd` to get a terminal to run commands in (protip: rightclick to paste stuff)
 * replace `python3` with `python`
+* see [common problems](#common-problems) if you run into issues
 
 
 ## first-time setup
@@ -29,11 +30,11 @@ windows users:
 
 ## regular usage
 
-* download/convert a youtube VOD automatically with https://ocv.me/dev/?ytdl-tui.py (save it next to the `noto-hinted` folder, not inside it):
+* download/convert a youtube VOD automatically with https://ocv.me/dev/?ytdl-tui.py (save it next to the `noto-hinted` folder, not inside it), then either doubleclick it or:
 
       python3 ytdl-tui.py youtube.com/watch?v=4dlsbJiEa-U
 
-* ...or do the downloads/conversion manually like this:
+* ...or do the downloads/conversion steps manually like this:
 
       python3 -m youtube_dl youtube.com/watch?v=4dlsbJiEa-U
       python3 -m chat_downloader --message_groups all -o same-filename.json youtube.com/watch?v=4dlsbJiEa-U
@@ -48,6 +49,18 @@ update to the latest version by running this:
 
     python3 -m pip install --user -U softchat chat-downloader
 
+
+## common problems
+
+**fixing the following error on windows:**  
+`[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate`
+
+* open Internet Explorer (yes really) and access each of these URLs once:
+  * https://ocv.me/  (if you use ytdl-tui)
+  * https://youtube.com/  (no need to accept cookies or consent to whatever, just accessing it is enough)
+* <sub>apparently this is how windows loads certificates into the cert-store? ms pls</sub>
+
+.
 
 # advice
 
