@@ -1,6 +1,6 @@
 # softchat
 * convert twitch/youtube chat into softsubs ([webm](https://ocv.me/dev/softchat.webm))
-* supports windows, macos, linux
+* supports windows, macos, linux, freebsd
 * MIT-Licensed, 2020-10-12, ed @ irc.rizon.net
 
 
@@ -12,20 +12,41 @@
 
 # howto
 
-* first-time setup (all recommended steps):
+windows users:
+* press Win+R and run `cmd` to get a terminal to run commands in
+* replace `python3` with `python`
+
+
+## first-time setup
+
+* run these commands:
 
       python3 -m pip install --user softchat chat-downloader fugashi[unidic]
       python3 -m unidic download
 
-* download/convert a youtube VOD automatically with https://ocv.me/dev/?ytdl-tui.py
+* download https://ocv.me/stuff/NotoSansCJKjp-Regular.otf into a folder named `noto-hinted` in the same place you keep your VOD rips
 
-* ...or do it manually like this:
+
+## regular usage
+
+* download/convert a youtube VOD automatically with https://ocv.me/dev/?ytdl-tui.py (save it next to the `noto-hinted` folder, not inside it):
+
+      python3 ytdl-tui.py youtube.com/watch?v=4dlsbJiEa-U
+
+* ...or do the downloads/conversion manually like this:
 
       python3 -m youtube_dl youtube.com/watch?v=4dlsbJiEa-U
       python3 -m chat_downloader --message_groups all -o same-filename.json youtube.com/watch?v=4dlsbJiEa-U
       python3 -m softchat -m2 same-filename.json
 
   the json filename should be whatever `youtube-dl` decides to use, except replace the extension with `.json` (and remember quotes depending on OS)
+
+
+## checking for updates
+
+update to the latest version by running this:
+
+    python3 -m pip install --user -U softchat chat-downloader
 
 
 # advice
