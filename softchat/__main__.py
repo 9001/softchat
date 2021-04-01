@@ -271,11 +271,12 @@ def main():
     ap.add_argument("--emote_nofont", action="store_true", help="[DEBUG] disable font generation")
     ap.add_argument("--emote_install", action="store_true", help="install emote fonts into media player folders")
     ap.add_argument("--emote_install_dir", type=str, default=None, help="Optional directory to install fonts, if not present will try to determine a default system location.")
+    ap.add_argument("--no_errdep_emotes", action="store_true", help="ignore missing dependencies for requested emote stuff; disable the unsatisfiable arguments and continue")
     ap.add_argument("fn", metavar="JSON_FILE", nargs="+")
     ar = ap.parse_args()
     # fmt: on
 
-    have_fugashi = load_fugashi()
+    have_fugashi = bool(load_fugashi(write_cfg=True))
     if ar.kana and not have_fugashi:
         error("you requested --kana but mecab failed to load")
         sys.exit(1)
@@ -291,7 +292,11 @@ def main():
         if err:
             err = ", ".join(err)
             error(f"you requested --emote_font but {err} is not installed")
-            sys.exit(1)
+            if ar.no_errdep_emotes:
+                ar.emote_font = None
+                ar.emote_sz = 1
+            else:
+                sys.exit(1)
 
     media_fn = None
     if ar.media and os.path.isfile(ar.media):

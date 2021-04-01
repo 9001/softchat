@@ -86,7 +86,7 @@ except:
     HAVE_FONTFORGE = find_fontforge()
 
 
-def load_fugashi():
+def load_fugashi(write_cfg=False):
     try:
         # help python find libmecab.dll, adjust this to fit your env if necessary
         dll_path = None
@@ -108,17 +108,18 @@ def load_fugashi():
         from fugashi import Tagger
 
         dicrc = os.path.join(dll_path, "dicrc")
-        with open(dicrc, "wb") as f:
-            f.write(
-                "\n".join(
-                    [
-                        r"node-format-yomi = %f[9] ",
-                        r"unk-format-yomi = %m",
-                        r"eos-format-yomi  = \n",
-                        "",
-                    ]
-                ).encode("utf-8")
-            )
+        if write_cfg:
+            with open(dicrc, "wb") as f:
+                f.write(
+                    "\n".join(
+                        [
+                            r"node-format-yomi = %f[9] ",
+                            r"unk-format-yomi = %m",
+                            r"eos-format-yomi  = \n",
+                            "",
+                        ]
+                    ).encode("utf-8")
+                )
 
         wakati = Tagger("-Owakati")
         yomi = Tagger("-Oyomi -r " + dicrc.replace("\\", "\\\\"))
@@ -131,7 +132,6 @@ def load_fugashi():
         import traceback
 
         warn("could not load fugashi:\n" + traceback.format_exc() + "-" * 72 + "\n")
-        return None
 
 
 def shell_esc(cmd):

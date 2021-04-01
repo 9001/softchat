@@ -10,6 +10,24 @@
 ![user feedback](./glowing-reviews.png)
 
 
+# readme TOC
+
+* [top](#softchat)
+* [howto](#howto)
+    * [first-time setup](#first-time-setup)
+        * [if you want graphical emotes](#if-you-want-graphical-emotes)
+    * [regular usage](#regular-usage)
+    * [checking for updates](#checking-for-updates)
+    * [common problems](#common-problems)
+        * [certificate errors on windows](#certificate-errors-on-windows)
+        * [missing cookies](#missing-cookies)
+* [advice](#advice)
+* [bugs](#bugs)
+* [about](#about)
+* [dependencies](#dependencies)
+* [maintainers](#maintainers)
+
+
 # howto
 
 windows users:
@@ -26,6 +44,11 @@ windows users:
       python3 -m unidic download
 
 * download https://ocv.me/stuff/NotoSansCJKjp-Regular.otf into a folder named `noto-hinted` in the same place you keep your VOD rips
+
+
+### if you want graphical emotes
+
+see `--emote_font` in [dependencies](#dependencies)
 
 
 ## regular usage
@@ -49,16 +72,39 @@ update to the latest version by running this:
 
     python3 -m pip install --user -U softchat chat-downloader
 
+this does not cover ytdl-tui; to check for ytdl-tui updates, run it and press uu
+
 
 ## common problems
 
-**fixing the following error on windows:**  
+### certificate errors on windows
+
+errors like the following:  
 `[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate`
 
 * open Internet Explorer (yes really) and access each of these URLs once:
+  * https://pypi.org/  (to install stuff with pip)
   * https://ocv.me/  (if you use ytdl-tui)
   * https://youtube.com/  (no need to accept cookies or consent to whatever, just accessing it is enough)
 * <sub>apparently this is how windows loads certificates into the cert-store? ms pls</sub>
+
+
+### missing cookies
+
+symptoms:
+* youtube-dl failing because the video is members-only
+* chat-downloader spamming a bunch of javascript then exiting
+
+this will export your cookies and make them available to chat-downloader and youtube-dl; should dodge captchas, make it possible to donwload members-only stuff, and also fix the recent consent requirement from EU members
+
+* install the following addon: https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/
+* access youtube.com, click the extension icon, `[Current Site]`
+* save as `cookies.txt` into your VODs folder (next to the `noto-hinted` folder)
+* ytdl-tui will now avoid the issue
+
+repeat these steps if it breaks again
+
+if you run chat-downloader manually instead of `ytdl-tui`, append these arguments: `-c cookies.txt`
 
 .
 
@@ -146,7 +192,9 @@ Similarly, rather than using `--emote_fill` to fill the background of all emotes
 * enable `--emote_font` with:
   * [fontforge](https://fontforge.org)
   * [ImageMagick](https://imagemagick.org)
-  * [potrace](http://potrace.sourceforge.net/)
+  * [potrace](http://potrace.sourceforge.net/)  (not required on windows)
+
+note: on windows, cmd must be reopened after installing dependencies
 
 
 # maintainers
