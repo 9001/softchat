@@ -95,7 +95,9 @@ symptoms:
 * youtube-dl failing because the video is members-only
 * chat-downloader spamming a bunch of javascript then exiting
 
-this will export your cookies and make them available to chat-downloader and youtube-dl; should dodge captchas, make it possible to donwload members-only stuff, and also fix the recent consent requirement from EU members
+note: generally ytdl-tui should handle most of these scenarios, so you could try that first, otherwise read on
+
+let's export your cookies and make them available to chat-downloader and youtube-dl; should dodge captchas, make it possible to donwload members-only stuff, and also fix the recent consent requirement from EU members
 
 * install the following addon: https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/
 * access youtube.com, click the extension icon, `[Current Site]`
