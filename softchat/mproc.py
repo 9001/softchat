@@ -226,7 +226,7 @@ class TextStuff(object):
 
 
 def gen_msg_initializer(fn, ar, vw, bw, emote_shortcuts, have_fugashi):
-    fn.args = [ar, vw, bw, emote_shortcuts, have_fugashi]
+    fn.args = [ar, vw, bw, emote_shortcuts]
 
     ptn_kanji = re.compile(r"[\u4E00-\u9FAF]")
     ptn_kana = re.compile(r"[\u3040-\u30FF]")
@@ -238,18 +238,25 @@ def gen_msg_initializer(fn, ar, vw, bw, emote_shortcuts, have_fugashi):
 
     fn.z = TextStuff(ar.sz, ar.fontdir, ar.emote_sz)
     if have_fugashi:
-        fn.wakati, fn.yomi = load_fugashi()
+        try:
+            fn.wakati, fn.yomi = load_fugashi()
+        except Exception as ex:
+            msg = "\033[33m\nfailed to load fugashi in worker:\n{}\n\033[0m\n"
+            print(msg.format(repr(ex)), end="")
 
 
 def gen_msg_thr(a):
     n_msg, msg = a
-    [ar, vw, bw, emote_shortcuts, have_fugashi] = gen_msg_thr.args
+    [ar, vw, bw, emote_shortcuts] = gen_msg_thr.args
     [ptn_kanji, ptn_kana, ptn_ascii, ptn_pre, ptn_post] = gen_msg_thr.regs
 
     z = gen_msg_thr.z
-    if have_fugashi:
+    try:
         wakati = gen_msg_thr.wakati
         yomi = gen_msg_thr.yomi
+        have_fugashi = True
+    except:
+        have_fugashi = False
 
     txt = msg.get("message", "") or ""
     txt = txt.translate(message_translation_table)
