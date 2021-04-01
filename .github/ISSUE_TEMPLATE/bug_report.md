@@ -1,7 +1,7 @@
 ---
 name: Bug report
 about: Something broke
-title: "[bork]"
+title: "[bork] "
 labels: bug
 assignees: '9001'
 

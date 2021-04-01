@@ -1,9 +1,9 @@
 ---
 name: Feature request
 about: Suggest stuff
-title: "[scopecreep]"
-labels: ''
-assignees: ''
+title: "[scopecreep] "
+labels: enhancement
+assignees: 'awused'
 
 ---
 
