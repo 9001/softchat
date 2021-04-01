@@ -15,7 +15,6 @@
 * [top](#softchat)
 * [howto](#howto)
     * [first-time setup](#first-time-setup)
-        * [if you want graphical emotes](#if-you-want-graphical-emotes)
     * [regular usage](#regular-usage)
     * [checking for updates](#checking-for-updates)
     * [common problems](#common-problems)
@@ -45,10 +44,7 @@ windows users:
 
 * download https://ocv.me/stuff/NotoSansCJKjp-Regular.otf into a folder named `noto-hinted` in the same place you keep your VOD rips
 
-
-### if you want graphical emotes
-
-see `--emote_font` in [dependencies](#dependencies)
+* if you want graphical emotes, see `--emote_font` in [dependencies](#dependencies)
 
 
 ## regular usage
