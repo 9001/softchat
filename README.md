@@ -49,7 +49,7 @@ windows users:
 
 ## regular usage
 
-* download/convert a youtube VOD automatically with https://ocv.me/dev/?ytdl-tui.py (save it next to the `noto-hinted` folder, not inside it), then either doubleclick it or:
+* download/convert a youtube VOD automatically with [ytdl-tui.py](./contrib/ytdl-tui.py) (save it next to the `noto-hinted` folder, not inside it), then either doubleclick it or:
 
       python3 ytdl-tui.py youtube.com/watch?v=4dlsbJiEa-U
 
@@ -80,7 +80,7 @@ errors like the following:
 
 * open Internet Explorer (yes really) and access each of these URLs once:
   * https://pypi.org/  (to install stuff with pip)
-  * https://ocv.me/  (if you use ytdl-tui)
+  * https://raw.githubusercontent.com/  (if you use ytdl-tui)
   * https://youtube.com/  (no need to accept cookies or consent to whatever, just accessing it is enough)
 * <sub>apparently this is how windows loads certificates into the cert-store? ms pls</sub>
 
