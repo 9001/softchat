@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """ytdl-tui.py: interactive youtube-dl frontend"""
-__version__ = "1.1"
+__version__ = "1.2"
 __author__ = "ed <irc.rizon.net>"
 __url__ = "https://ocv.me/dev/?ytdl-tui.py"
 __credits__ = ["stackoverflow.com"]
@@ -14,11 +14,11 @@ download python3 from https://www.python.org/
 ("Downloads" and click the button under "Download for Windows")
 -- when installing, make sure to enable the "Add Python to PATH" checkbox!
 then download this file (ytdl-tui.py) and doubleclick it, that should be all
-"""
 
+-----------------------------------------------------------------------
 
-""" How to use this on android / termux:
-copy-paste this block of text to create a shortcut:
+How to use this on android / termux:
+  copy-paste this block of text to create a shortcut:
 
 apt update && apt -y full-upgrade &&
 termux-setup-storage;
@@ -28,6 +28,27 @@ curl -LO https://ocv.me/dev/ytdl-tui.py &&
 echo 'cd /storage/emulated/0/Movies/ && python3 ~/ytdl-tui.py' >.shortcuts/ytdl-tui
 
 # stop selecting here :p
+
+-----------------------------------------------------------------------
+
+optional dependencies (keep them in the same folder):
+* https://ocv.me/dev/?chat_replay_downloader.py
+* https://ocv.me/dev/?softchat.py
+
+-----------------------------------------------------------------------
+
+new in this version:
+* convert chat into softsubs if the required dependencies are available
+
+-----------------------------------------------------------------------
+
+how to ensure max audio quality (updated 2020-09-02):
+-f 'bestvideo+(251/141)/22/bestvideo+(258/256/140/250/249/139)'
+https://gist.github.com/AgentOak/34d47c65b1d28829bb17c24c04a0096f
+https://github.com/ytdl-org/youtube-dl/blob/e450f6cb634f17fd4ef59291eafb68b05c141e43/youtube_dl/extractor/youtube.py#L447
+https://github.com/ytdl-org/youtube-dl/blob/6c22cee673f59407a63b2916d8f0623a95a8ea20/youtube_dl/extractor/common.py#L1380
+
+-----------------------------------------------------------------------
 """
 
 
@@ -45,14 +66,25 @@ import urllib.request
 import subprocess as sp
 
 
-# nice globals
+# latest version
 URL_SELF = "https://ocv.me/dev/ytdl-tui.py"
+
+# https://ocv.me/dev/?chat_replay_downloader.py
+CHAT_DOWNLOADER_PY = 'chat_replay_downloader.py'
+
+# https://ocv.me/dev/?softchat.py
+CHAT_CONVERTER_PY = 'softchat.py'
+
 # zeranoe blocks direct-linking so you get stolen builds instead
 URL_FFMPEG = "https://ocv.me/rehost/ffmpeg-4.2.3-win32-static-lgpl.zip"
+
+# apparently no api that returns both the final filename and the URL orz
+created_files = []
+
+# misc
 TMPDIR = os.path.join(tempfile.gettempdir(), "ytdl-tui-ocv")
 PYDIR = os.path.join(TMPDIR, "py")
 WINDOWS = platform.system() == "Windows"
-
 
 # updater state vars
 TUI_PATH = os.path.abspath(os.path.realpath(__file__))
@@ -74,6 +106,17 @@ if UPGRADING:
 def eprint(*args, **kwargs):
     kwargs["file"] = sys.stderr
     print(*args, **kwargs)
+
+
+def find_dep(fn):
+    r = os.path.join(os.path.dirname(os.path.realpath(__file__)), fn)
+    if os.path.exists(r):
+        return r
+
+    if os.path.exists(fn):
+        return fn
+
+    return None
 
 
 def update_writeback():
@@ -296,14 +339,23 @@ def act(cmd, url):
             raise Exception("\n\n  that's an invalid audio format fam\n")
 
     if ok or not cmd:
+        hooks = []
         if cmd in ["a", "ao"]:
-            opts["progress_hooks"] = [oggify_cb]
+            hooks.append(oggify_cb)
+
+        hooks.append(final_cb)
+        opts["progress_hooks"] = hooks
 
         links = list(x for x in url.split(" ") if x)
         eprint('\ndownloading {} links...'.format(len(links)))
 
         with youtube_dl.YoutubeDL(opts) as ydl:
-            ydl.download(links)
+            #ydl.download(links)
+            inf = ydl.extract_info(url, download=True)
+
+        vids = inf.get('entries', [inf])
+        #print(json.dumps(inf, sort_keys=True, indent=4))
+        grab_chats(vids)
 
         return
 
@@ -324,6 +376,71 @@ def act(cmd, url):
         return
 
     raise Exception("\n\n  no comprende\n")
+
+
+def final_cb(d):
+    if d["status"] == "finished":
+        created_files.append(d["filename"])
+
+
+def grab_chats(vids):
+    py = find_dep(CHAT_DOWNLOADER_PY)
+    if not py:
+        eprint('could not find chat downloader, will not grab chats')
+        return
+
+    items = []
+    for vid in vids:
+        if vid['extractor'] != 'youtube':
+            continue
+
+        for fn in created_files:
+            v_id = vid['id']
+            if f'-{v_id}.' in fn:
+                items.append([vid['webpage_url'], v_id, fn])
+                break
+
+    for url, v_id, fn in items:
+        fn = fn.rsplit('.', 1)[0]
+        if not fn.endswith(v_id) and '.' in fn:
+            fn = fn.rsplit('.', 1)[0]
+
+        fn += '.json'
+        eprint(f'\nchat-dl: [{url}] [{fn}]')
+
+        cmd = [
+            sys.executable, py,
+            "-message_type", "all",
+            "-o", fn,
+            url
+        ]
+        try:
+            sp.check_call(cmd)
+            if not os.path.exists(fn):
+                # may exit 0 even if it failed
+                raise Exception()
+            
+            eprint('chat download okke')
+            chatconv(fn)
+        except:
+            eprint('chat download fug')
+
+
+def chatconv(fn):
+    py = find_dep(CHAT_CONVERTER_PY)
+    if not py:
+        eprint('could not find chat converter, will not create softsubs')
+        return
+
+    cmd = [
+        sys.executable, py,
+        "-m2", fn
+    ]
+    try:
+        sp.check_call(cmd)
+        eprint('chat convert okke')
+    except:
+        eprint('chat convert fug')
 
 
 def oggify_cb(d):
@@ -442,7 +559,7 @@ if __name__ == "__main__":
     except:
         import traceback
 
-        traceback.print_exc()
+        traceback.print_exc()  # =stderr
         eprint("\npress enter to exit")
         input()
 
