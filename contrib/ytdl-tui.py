@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """ytdl-tui.py: interactive youtube-dl frontend"""
-__version__ = "1.3"
+__version__ = "1.4"
 __author__ = "ed <irc.rizon.net>"
 __url__ = "https://ocv.me/dev/?ytdl-tui.py"
 __credits__ = ["stackoverflow.com"]
@@ -31,18 +31,17 @@ echo 'cd /storage/emulated/0/Movies/ && python3 ~/ytdl-tui.py' >.shortcuts/ytdl-
 
 -----------------------------------------------------------------------
 
-optional dependencies (keep them in the same folder):
-* https://ocv.me/dev/?chat_replay_downloader.py
-* https://ocv.me/dev/?softchat.py
+optional dependencies (download/convert chatlogs to subtitles):
+* python3 -m pip install --user chat-downloader softchat
 
 -----------------------------------------------------------------------
 
 new in this version:
-* convert chat into softsubs if the required dependencies are available
+* chat-downloader and softchat are pypi packages now
 
 -----------------------------------------------------------------------
 
-how to ensure max audio quality (updated 2020-09-02):
+how to ensure max audio quality (updated 2020-09-02, not-impl here):
 -f 'bestvideo+(251/141)/22/bestvideo+(258/256/140/250/249/139)'
 https://gist.github.com/AgentOak/34d47c65b1d28829bb17c24c04a0096f
 https://github.com/ytdl-org/youtube-dl/blob/e450f6cb634f17fd4ef59291eafb68b05c141e43/youtube_dl/extractor/youtube.py#L447
@@ -67,14 +66,13 @@ import urllib.request
 import subprocess as sp
 
 
+def eprint(*args, **kwargs):
+    kwargs["file"] = sys.stderr
+    print(*args, **kwargs)
+
+
 # latest version
 URL_SELF = "https://ocv.me/dev/ytdl-tui.py"
-
-# https://ocv.me/dev/?chat_replay_downloader.py
-CHAT_DOWNLOADER_PY = 'chat_replay_downloader.py'
-
-# https://ocv.me/dev/?softchat.py
-CHAT_CONVERTER_PY = 'softchat.py'
 
 # zeranoe blocks direct-linking so you get stolen builds instead
 URL_FFMPEG = "https://ocv.me/rehost/ffmpeg-4.2.3-win32-static-lgpl.zip"
@@ -84,6 +82,7 @@ created_files = []
 
 # misc
 TMPDIR = os.path.join(tempfile.gettempdir(), "ytdl-tui-ocv")
+TMPDIR = os.path.abspath(os.path.realpath(TMPDIR))  # thx macos
 PYDIR = os.path.join(TMPDIR, "py")
 WINDOWS = platform.system() == "Windows"
 
@@ -99,14 +98,10 @@ if UPGRADING:
         with open(TUI_PATH_DESC, "rb") as f:
             TUI_PATH = f.read().decode("utf-8") or TUI_PATH
     except:
+        eprint("[*] could not read [{}]".format(TUI_PATH_DESC)) 
         pass
 
 #print('\n'.join([TMPDIR, PYDIR, TUI_PATH]))
-
-
-def eprint(*args, **kwargs):
-    kwargs["file"] = sys.stderr
-    print(*args, **kwargs)
 
 
 def find_dep(fn):
@@ -145,6 +140,7 @@ def update_writeback():
         with open(TUI_PATH, "wb") as f:
             f.write(py)
 
+        os.chmod(TUI_PATH, 0o755)
         os.remove(TUI_PATH_DESC)
         break
 
@@ -219,11 +215,17 @@ def tui_updatechk():
     with open(TUI_PATH_DESC, "wb") as f:
         f.write(TUI_PATH.encode("utf-8"))
 
+    os.chmod(fp, 0o755)
+
     eprint("update found! switching to new version...")
     if WINDOWS:
-        sp.Popen(["start", sys.executable, fp], shell=True)
+        cmd = ["start", sys.executable, fp]
+        eprint("[*] cmd: " + repr(cmd))
+        sp.Popen(cmd, shell=True)
     else:
-        os.execl(sys.executable, sys.executable, fp)
+        cmd = [sys.executable, fp]
+        eprint("[*] cmd: " + repr(cmd))
+        os.execl(sys.executable, *cmd)
 
     sys.exit(0)
 
@@ -339,7 +341,7 @@ def act(cmd, url):
         except:
             raise Exception("\n\n  that's an invalid audio format fam\n")
 
-    if ok or not cmd:
+    if ok or cmd in [None, "f"]:
         hooks = []
         if cmd in ["a", "ao"]:
             hooks.append(oggify_cb)
@@ -350,32 +352,26 @@ def act(cmd, url):
         links = list(x for x in url.split(" ") if x)
         eprint('\ndownloading {} links...'.format(len(links)))
 
-        with youtube_dl.YoutubeDL(opts) as ydl:
-            #ydl.download(links)
-            for url in links:
-                if not url.strip():
-                    continue
+        for url in links:
+            if not url.strip():
+                continue
 
+            if cmd == "f":
+                opt2 = opts.copy()
+                opt2["listformats"] = True
+                with youtube_dl.YoutubeDL(opt2) as ydl:
+                    inf = ydl.extract_info(url)
+
+                eprint("\nenter list of formats to download, separate with space:")
+                eprint("fmts> ", end="")
+
+                opts["format"] = input().replace(" ", "+")
+
+            with youtube_dl.YoutubeDL(opts) as ydl:
                 inf = ydl.extract_info(url, download=True)
                 vids = inf.get('entries', [inf])
                 #print(json.dumps(inf, sort_keys=True, indent=4))
                 grab_chats(vids)
-
-        return
-
-    if cmd == "f":
-        opt2 = opts.copy()
-        opt2["listformats"] = True
-        with youtube_dl.YoutubeDL(opt2) as ydl:
-            ydl.download(url)
-            # md = ydl.extract_info(url, download=False)
-            # fmts = md.get('formats', [md])
-        eprint("\nenter list of formats to download, separate with space:")
-        eprint("fmts> ", end="")
-
-        opts["format"] = input().replace(" ", "+")
-        with youtube_dl.YoutubeDL(opts) as ydl:
-            ydl.download(url)
 
         return
 
@@ -388,11 +384,6 @@ def final_cb(d):
 
 
 def grab_chats(vids):
-    py = find_dep(CHAT_DOWNLOADER_PY)
-    if not py:
-        eprint('could not find chat downloader, will not grab chats')
-        return
-
     items = []
     for vid in vids:
         if vid['extractor'] != 'youtube':
@@ -404,6 +395,15 @@ def grab_chats(vids):
                 items.append([vid['webpage_url'], v_id, fn])
                 break
 
+    if not items:
+        return
+
+    try:
+        import chat_downloader
+    except:
+        eprint('could not find chat downloader, will not grab chats')
+        return
+
     for url, v_id, fn in items:
         fn = fn.rsplit('.', 1)[0]
         if not fn.endswith(v_id) and '.' in fn:
@@ -411,12 +411,19 @@ def grab_chats(vids):
 
         fn += '.json'
         cmd = [
-            sys.executable, py,
-            "-message_type", "all",
+            sys.executable, "-m", "chat_downloader",
+            "--chat_type", "live",
+            "--message_groups", "all",
+            "--sort_keys",
+            "--indent", "2",
             "-o", fn,
             url
         ]
-        scmd = " ".join(shlex.quote(x) for x in cmd)
+        if WINDOWS:
+            scmd = " ".join(f'"{x}"' for x in cmd)
+        else:
+            scmd = " ".join(shlex.quote(x) for x in cmd)
+
         eprint(f'\nchat-dl: {scmd}')
         if os.path.exists(fn):
             eprint('chat json already exists, will not download')
@@ -435,13 +442,14 @@ def grab_chats(vids):
 
 
 def chatconv(fn):
-    py = find_dep(CHAT_CONVERTER_PY)
-    if not py:
+    try:
+        import softchat
+    except:
         eprint('could not find chat converter, will not create softsubs')
         return
 
     cmd = [
-        sys.executable, py,
+        sys.executable, "-m", "softchat",
         "-m2", fn
     ]
     try:
