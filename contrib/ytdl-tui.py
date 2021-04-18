@@ -3,7 +3,7 @@
 """ytdl-tui.py: interactive youtube-dl frontend"""
 __version__ = "1.6"
 __author__ = "ed <irc.rizon.net>"
-__url__ = "https://ocv.me/dev/?ytdl-tui.py"
+__url__ = "https://github.com/9001/softchat/"
 __credits__ = ["stackoverflow.com"]
 __license__ = "MIT"
 __copyright__ = 2020
@@ -24,7 +24,7 @@ apt update && apt -y full-upgrade &&
 termux-setup-storage;
 apt -y install curl python ffmpeg &&
 cd && mkdir -p .shortcuts &&
-curl -LO https://ocv.me/dev/ytdl-tui.py &&
+curl -LO https://github.com/9001/softchat/raw/hovedstraum/contrib/ytdl-tui.py &&
 echo 'cd /storage/emulated/0/Movies/ && python3 ~/ytdl-tui.py' >.shortcuts/ytdl-tui
 
 # stop selecting here :p
@@ -78,6 +78,7 @@ def eprint(*args, **kwargs):
     print(*args, **kwargs)
 
 
+# fmt: off
 # youtube-dl fork to use (last assignment wins), format: [ pip, import ]
 # also see https://github.com/animelover1984/youtube-dl
 YTDL_FORK = [ "youtube-dlc", "youtube_dlc" ]  # https://github.com/blackjack4494/yt-dlc
@@ -85,12 +86,12 @@ YTDL_FORK = [ "yt-dlp",      "yt_dlp"      ]  # https://github.com/yt-dlp/yt-dlp
 YTDL_FORK = [ "youtube-dl",  "youtube_dl"  ]  # https://github.com/ytdl-org/youtube-dl  (the OG)
 
 # latest version
-URL_SELF = "https://ocv.me/dev/ytdl-tui.py"
 URL_SELF = "https://raw.githubusercontent.com/9001/softchat/hovedstraum/contrib/ytdl-tui.py"
 
 # grab latest win64-gpl-[0-9].zip
 URL_FFMPEG = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases"
 
+# fmt: on
 # apparently no api that returns both the final filename and the URL orz
 created_files = []
 
@@ -241,8 +242,9 @@ def tui_updatechk():
         f.write(py)
 
     if not py.rstrip().endswith(b"\n# ytdl-tui eof"):
-        msg = f"update check failed; server returned garbage ({len(py)} bytes), see {fp}"
-        eprint(msg)
+        eprint(
+            f"update check failed; server returned garbage ({len(py)} bytes), see {fp}"
+        )
         sys.exit(1)
         return True
 
@@ -271,10 +273,10 @@ def find_ffmpeg():
             hit = shutil.which(n, path=base)
             if not hit or "ImageMagick" in hit:
                 continue
-            
+
             hits[n] = hit
             break
-    
+
     return hits
 
 
@@ -297,27 +299,27 @@ def assert_ffmpeg():
                 raise
 
         zip_url = None
-        ptn = re.compile(r'.*-win64-gpl-[0-9\.]+\.zip$')
-        jt = r.read().decode('utf-8', 'replace')
+        ptn = re.compile(r".*-win64-gpl-[0-9\.]+\.zip$")
+        jt = r.read().decode("utf-8", "replace")
         jo = json.loads(jt)
         for rls in jo:
-            for asset in rls['assets']:
-                url = asset['browser_download_url']
+            for asset in rls["assets"]:
+                url = asset["browser_download_url"]
                 if ptn.match(url):
                     zip_url = url
                     break
-                    
+
             if zip_url:
                 break
 
         eprint("downloading " + zip_url)
         try:
             r = urllib.request.urlopen(zip_url)
-            sz = int(r.getheader('Content-Length'))
+            sz = int(r.getheader("Content-Length"))
         except Exception as ex:
             if not need_ie(zip_url, ex):
                 raise
-        
+
         got = 0
         ctr = 0
         eprint()
@@ -327,9 +329,11 @@ def assert_ffmpeg():
                 got += len(buf)
                 ctr += 1
                 if ctr % 32 == 0 or not buf:
-                    perc = got * 100. / sz
-                    eprint(f"\033[A {got/1024/1024:.2f} of {sz/1024/1024:.2f} MiB, {perc:5.2f}%")
-                
+                    perc = got * 100.0 / sz
+                    eprint(
+                        f"\033[A {got/1024/1024:.2f} of {sz/1024/1024:.2f} MiB, {perc:5.2f}%"
+                    )
+
                 if not buf:
                     break
 
