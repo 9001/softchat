@@ -1,7 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """ytdl-tui.py: interactive youtube-dl frontend"""
-__version__ = "1.0"
+__version__ = "1.1"
 __author__ = "ed <irc.rizon.net>"
 __url__ = "https://ocv.me/dev/?ytdl-tui.py"
 __credits__ = ["stackoverflow.com"]
@@ -14,6 +14,20 @@ download python3 from https://www.python.org/
 ("Downloads" and click the button under "Download for Windows")
 -- when installing, make sure to enable the "Add Python to PATH" checkbox!
 then download this file (ytdl-tui.py) and doubleclick it, that should be all
+"""
+
+
+""" How to use this on android / termux:
+copy-paste this block of text to create a shortcut:
+
+apt update && apt -y full-upgrade &&
+termux-setup-storage;
+apt -y install curl python ffmpeg &&
+cd && mkdir -p .shortcuts &&
+curl -LO https://ocv.me/dev/ytdl-tui.py &&
+echo 'cd /storage/emulated/0/Movies/ && python3 ~/ytdl-tui.py' >.shortcuts/ytdl-tui
+
+# stop selecting here :p
 """
 
 
@@ -53,6 +67,8 @@ if UPGRADING:
             TUI_PATH = f.read().decode("utf-8") or TUI_PATH
     except:
         pass
+
+#print('\n'.join([TMPDIR, PYDIR, TUI_PATH]))
 
 
 def eprint(*args, **kwargs):
@@ -247,10 +263,12 @@ def act(cmd, url):
     if "twitter.com" in url:
         opts["outtmpl"] = "tw-%(id)s-%(uploader_id)s - %(uploader)s.%(ext)s"
 
+    #import pudb; pu.db
+
     try:
         import youtube_dl
     except Exception as ex:
-        # eprint(repr(ex))
+        eprint('will download youtube-dl because:\n  ' + repr(ex))
         download_ytdl()
         try:
             import youtube_dl
@@ -281,8 +299,11 @@ def act(cmd, url):
         if cmd in ["a", "ao"]:
             opts["progress_hooks"] = [oggify_cb]
 
+        links = list(x for x in url.split(" ") if x)
+        eprint('\ndownloading {} links...'.format(len(links)))
+
         with youtube_dl.YoutubeDL(opts) as ydl:
-            ydl.download(list(x for x in url.split(" ") if x))
+            ydl.download(links)
 
         return
 
@@ -424,5 +445,6 @@ if __name__ == "__main__":
         traceback.print_exc()
         eprint("\npress enter to exit")
         input()
+
 
 # ytdl-tui eof
