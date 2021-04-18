@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """ytdl-tui.py: interactive youtube-dl frontend"""
-__version__ = "1.5"
+__version__ = "1.6"
 __author__ = "ed <irc.rizon.net>"
 __url__ = "https://ocv.me/dev/?ytdl-tui.py"
 __credits__ = ["stackoverflow.com"]
@@ -41,8 +41,9 @@ optional steps to avoid captchas, and to download members-only videos:
 -----------------------------------------------------------------------
 
 new in this version:
-* use cookies.txt if exists
-* set softchat args to convert emotes into vector graphics
+* support youtube-dl forks
+* grab and convert chat from twitch as well
+* replace the old zeranoe ffmpeg with latest stable btbn from github
 
 -----------------------------------------------------------------------
 
@@ -51,13 +52,6 @@ how to ensure max audio quality (updated 2020-09-02, not-impl here):
 https://gist.github.com/AgentOak/34d47c65b1d28829bb17c24c04a0096f
 https://github.com/ytdl-org/youtube-dl/blob/e450f6cb634f17fd4ef59291eafb68b05c141e43/youtube_dl/extractor/youtube.py#L447
 https://github.com/ytdl-org/youtube-dl/blob/6c22cee673f59407a63b2916d8f0623a95a8ea20/youtube_dl/extractor/common.py#L1380
-
------------------------------------------------------------------------
-
-list of youtube-dl forks in case mainline is dead:
-* https://github.com/yt-dlp/yt-dlp
-* https://github.com/blackjack4494/yt-dlc
-* https://github.com/animelover1984/youtube-dl
 
 -----------------------------------------------------------------------
 """
@@ -84,11 +78,18 @@ def eprint(*args, **kwargs):
     print(*args, **kwargs)
 
 
+# youtube-dl fork to use (last assignment wins), format: [ pip, import ]
+# also see https://github.com/animelover1984/youtube-dl
+YTDL_FORK = [ "youtube-dlc", "youtube_dlc" ]  # https://github.com/blackjack4494/yt-dlc
+YTDL_FORK = [ "yt-dlp",      "yt_dlp"      ]  # https://github.com/yt-dlp/yt-dlp  (best?)
+YTDL_FORK = [ "youtube-dl",  "youtube_dl"  ]  # https://github.com/ytdl-org/youtube-dl  (the OG)
+
 # latest version
 URL_SELF = "https://ocv.me/dev/ytdl-tui.py"
+URL_SELF = "https://raw.githubusercontent.com/9001/softchat/hovedstraum/contrib/ytdl-tui.py"
 
-# zeranoe blocks direct-linking so you get stolen builds instead
-URL_FFMPEG = "https://ocv.me/rehost/ffmpeg-4.2.3-win32-static-lgpl.zip"
+# grab latest win64-gpl-[0-9].zip
+URL_FFMPEG = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases"
 
 # apparently no api that returns both the final filename and the URL orz
 created_files = []
@@ -99,6 +100,7 @@ TMPDIR = os.path.join(tempfile.gettempdir(), "ytdl-tui-ocv")
 TMPDIR = os.path.abspath(os.path.realpath(TMPDIR))  # thx macos
 PYDIR = os.path.join(TMPDIR, "py")
 WINDOWS = platform.system() == "Windows"
+YTDL_PIP, YTDL_IMP = YTDL_FORK
 
 # updater state vars
 TUI_PATH = os.path.abspath(os.path.realpath(__file__))
@@ -112,7 +114,7 @@ if UPGRADING:
         with open(TUI_PATH_DESC, "rb") as f:
             TUI_PATH = f.read().decode("utf-8") or TUI_PATH
     except:
-        eprint("[*] could not read [{}]".format(TUI_PATH_DESC))
+        eprint(f"[*] could not read [{TUI_PATH_DESC}]")
         pass
 
 # print('\n'.join([TMPDIR, PYDIR, TUI_PATH]))
@@ -186,7 +188,7 @@ def ytdl_updatechk():
     pkgs = pkgs.strip().decode("utf-8").split("\n")
 
     got = None
-    pkg = "youtube-dl"
+    pkg = YTDL_PIP
     for v in pkgs:
         if not v.startswith(pkg + "=="):
             continue
@@ -198,7 +200,7 @@ def ytdl_updatechk():
         download_ytdl()
         return
 
-    r = urllib.request.urlopen("https://pypi.org/pypi/{}/json".format(pkg))
+    r = urllib.request.urlopen(f"https://pypi.org/pypi/{pkg}/json")
     txt = r.read()
     obj = json.loads(txt)
     latest = obj["info"]["version"]
@@ -206,7 +208,7 @@ def ytdl_updatechk():
         eprint("aight, no updates, all good")
         return
 
-    eprint("have {}, upgrading to {}...".format(got, latest))
+    eprint(f"have {got}, upgrading to {latest}...")
     download_ytdl()
 
 
@@ -221,7 +223,7 @@ def download_ytdl():
             "-t",
             PYDIR,
             "-U",
-            "youtube-dl",
+            YTDL_PIP,
         ]
     )
 
@@ -234,14 +236,12 @@ def tui_updatechk():
             eprint("aight, no updates, all good")
             return False
 
-    fp = os.path.join(TMPDIR, "upd-{}.py".format(int(time.time())))
+    fp = os.path.join(TMPDIR, f"upd-{time.time():.0f}.py")
     with open(fp, "wb") as f:
         f.write(py)
 
     if not py.rstrip().endswith(b"\n# ytdl-tui eof"):
-        msg = "update check failed; server returned garbage ({} bytes), see {}".format(
-            len(py), fp
-        )
+        msg = f"update check failed; server returned garbage ({len(py)} bytes), see {fp}"
         eprint(msg)
         sys.exit(1)
         return True
@@ -266,16 +266,15 @@ def tui_updatechk():
 
 def find_ffmpeg():
     hits = {}
-    suf = ".exe" if WINDOWS else ""
     for n in ["ffmpeg", "ffprobe"]:
-        for base in ["", TMPDIR + "/"]:
-            try:
-                attempt = base + "ffmpeg" + suf
-                sp.check_call([attempt, "-version"], stdout=sp.DEVNULL)
-                hits[n] = attempt
-                break
-            except:
+        for base in [TMPDIR + "/", None]:
+            hit = shutil.which(n, path=base)
+            if not hit or "ImageMagick" in hit:
                 continue
+            
+            hits[n] = hit
+            break
+    
     return hits
 
 
@@ -290,16 +289,47 @@ def assert_ffmpeg():
 
     zp = os.path.join(TMPDIR, "ffmpeg.zip")
     if not os.path.exists(zp):
-        eprint("downloading FFmpeg...")
+        eprint("downloading FFmpeg release-list...")
         try:
             r = urllib.request.urlopen(URL_FFMPEG)
         except Exception as ex:
             if not need_ie(URL_FFMPEG, ex):
                 raise
 
+        zip_url = None
+        ptn = re.compile(r'.*-win64-gpl-[0-9\.]+\.zip$')
+        jt = r.read().decode('utf-8', 'replace')
+        jo = json.loads(jt)
+        for rls in jo:
+            for asset in rls['assets']:
+                url = asset['browser_download_url']
+                if ptn.match(url):
+                    zip_url = url
+                    break
+                    
+            if zip_url:
+                break
+
+        eprint("downloading " + zip_url)
+        try:
+            r = urllib.request.urlopen(zip_url)
+            sz = int(r.getheader('Content-Length'))
+        except Exception as ex:
+            if not need_ie(zip_url, ex):
+                raise
+        
+        got = 0
+        ctr = 0
+        eprint()
         with open(zp, "wb") as f:
             while True:
                 buf = r.read(4096)
+                got += len(buf)
+                ctr += 1
+                if ctr % 32 == 0 or not buf:
+                    perc = got * 100. / sz
+                    eprint(f"\033[A {got/1024/1024:.2f} of {sz/1024/1024:.2f} MiB, {perc:5.2f}%")
+                
                 if not buf:
                     break
 
@@ -385,12 +415,12 @@ def act(cmd, url):
     # import pudb; pu.db
 
     try:
-        import youtube_dl
+        youtube_dl = __import__(YTDL_IMP)
     except Exception as ex:
         eprint("will download youtube-dl because:\n  " + repr(ex))
         download_ytdl()
         try:
-            import youtube_dl
+            youtube_dl = __import__(YTDL_IMP)
         except Exception as ex:
             eprint("\n\n  failed to load youtube-dl :(\n  pls screenshot this\n")
             eprint(repr(ex))
@@ -423,7 +453,7 @@ def act(cmd, url):
         opts["progress_hooks"] = hooks
 
         links = list(x for x in url.split(" ") if x)
-        eprint("\ndownloading {} links...".format(len(links)))
+        eprint(f"\ndownloading {len(links)} links...")
 
         for url in links:
             if not url.strip():
@@ -444,7 +474,7 @@ def act(cmd, url):
                 with youtube_dl.YoutubeDL(opts) as ydl:
                     inf = ydl.extract_info(url, download=True)
                     vids = inf.get("entries", [inf])
-                    # eprint(json.dumps(inf, sort_keys=True, indent=4))
+                    # eprint(json.dumps(vids, sort_keys=True, indent=4))
 
             except Exception as ex:
                 if not need_ie(url, ex):
@@ -467,12 +497,12 @@ def final_cb(d):
 def grab_chats(vids):
     items = []
     for vid in vids:
-        if vid["extractor"] != "youtube":
+        if vid["extractor"] not in ["youtube", "twitch"]:
             continue
 
         for fn in created_files:
             v_id = vid["id"]
-            if f"-{v_id}." in fn:
+            if f"-{v_id}." in fn or f" [{v_id}]." in fn:
                 items.append([vid["webpage_url"], v_id, fn])
                 break
 
@@ -630,7 +660,7 @@ def main():
     argv = sys.argv[1:]
     while True:
         eprint(
-            """
+            f"""
 ready!
 list of commands and what they do:
   <link>      download media at <link>
@@ -638,7 +668,7 @@ list of commands and what they do:
   ao <link>   download opus audio from <link>
                 (also: a4=mp4, a3=mp3)
   f <link>    show format selector for <link>
-  u           update-check youtube-dl
+  u           update-check {YTDL_PIP}
   uu          update-check this script
 """
         )
