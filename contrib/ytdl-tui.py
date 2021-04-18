@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """ytdl-tui.py: interactive youtube-dl frontend"""
-__version__ = "1.2"
+__version__ = "1.3"
 __author__ = "ed <irc.rizon.net>"
 __url__ = "https://ocv.me/dev/?ytdl-tui.py"
 __credits__ = ["stackoverflow.com"]
@@ -56,6 +56,7 @@ import os
 import sys
 import time
 import json
+import shlex
 import shutil
 import hashlib
 import zipfile
@@ -351,11 +352,14 @@ def act(cmd, url):
 
         with youtube_dl.YoutubeDL(opts) as ydl:
             #ydl.download(links)
-            inf = ydl.extract_info(url, download=True)
+            for url in links:
+                if not url.strip():
+                    continue
 
-        vids = inf.get('entries', [inf])
-        #print(json.dumps(inf, sort_keys=True, indent=4))
-        grab_chats(vids)
+                inf = ydl.extract_info(url, download=True)
+                vids = inf.get('entries', [inf])
+                #print(json.dumps(inf, sort_keys=True, indent=4))
+                grab_chats(vids)
 
         return
 
@@ -406,14 +410,18 @@ def grab_chats(vids):
             fn = fn.rsplit('.', 1)[0]
 
         fn += '.json'
-        eprint(f'\nchat-dl: [{url}] [{fn}]')
-
         cmd = [
             sys.executable, py,
             "-message_type", "all",
             "-o", fn,
             url
         ]
+        scmd = " ".join(shlex.quote(x) for x in cmd)
+        eprint(f'\nchat-dl: {scmd}')
+        if os.path.exists(fn):
+            eprint('chat json already exists, will not download')
+            return
+
         try:
             sp.check_call(cmd)
             if not os.path.exists(fn):
@@ -423,7 +431,7 @@ def grab_chats(vids):
             eprint('chat download okke')
             chatconv(fn)
         except:
-            eprint('chat download fug')
+            eprint(f'chat download fug: {scmd}')
 
 
 def chatconv(fn):
