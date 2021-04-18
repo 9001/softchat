@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """ytdl-tui.py: interactive youtube-dl frontend"""
-__version__ = "1.4"
+__version__ = "1.5"
 __author__ = "ed <irc.rizon.net>"
 __url__ = "https://ocv.me/dev/?ytdl-tui.py"
 __credits__ = ["stackoverflow.com"]
@@ -34,10 +34,15 @@ echo 'cd /storage/emulated/0/Movies/ && python3 ~/ytdl-tui.py' >.shortcuts/ytdl-
 optional dependencies (download/convert chatlogs to subtitles):
 * python3 -m pip install --user chat-downloader softchat
 
+optional steps to avoid captchas, and to download members-only videos:
+* install https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/
+* write cookies.txt into the folder you're running ytdl-tui in
+
 -----------------------------------------------------------------------
 
 new in this version:
-* chat-downloader and softchat are pypi packages now
+* use cookies.txt if exists
+* set softchat args to convert emotes into vector graphics
 
 -----------------------------------------------------------------------
 
@@ -48,9 +53,17 @@ https://github.com/ytdl-org/youtube-dl/blob/e450f6cb634f17fd4ef59291eafb68b05c14
 https://github.com/ytdl-org/youtube-dl/blob/6c22cee673f59407a63b2916d8f0623a95a8ea20/youtube_dl/extractor/common.py#L1380
 
 -----------------------------------------------------------------------
+
+list of youtube-dl forks in case mainline is dead:
+* https://github.com/yt-dlp/yt-dlp
+* https://github.com/blackjack4494/yt-dlc
+* https://github.com/animelover1984/youtube-dl
+
+-----------------------------------------------------------------------
 """
 
 
+import re
 import os
 import sys
 import time
@@ -81,6 +94,7 @@ URL_FFMPEG = "https://ocv.me/rehost/ffmpeg-4.2.3-win32-static-lgpl.zip"
 created_files = []
 
 # misc
+COOKIES = "cookies.txt"
 TMPDIR = os.path.join(tempfile.gettempdir(), "ytdl-tui-ocv")
 TMPDIR = os.path.abspath(os.path.realpath(TMPDIR))  # thx macos
 PYDIR = os.path.join(TMPDIR, "py")
@@ -98,10 +112,30 @@ if UPGRADING:
         with open(TUI_PATH_DESC, "rb") as f:
             TUI_PATH = f.read().decode("utf-8") or TUI_PATH
     except:
-        eprint("[*] could not read [{}]".format(TUI_PATH_DESC)) 
+        eprint("[*] could not read [{}]".format(TUI_PATH_DESC))
         pass
 
-#print('\n'.join([TMPDIR, PYDIR, TUI_PATH]))
+# print('\n'.join([TMPDIR, PYDIR, TUI_PATH]))
+
+
+def need_ie(url, ex):
+    if not WINDOWS or "CERTIFICATE_VERIFY_FAILED" not in repr(ex):
+        return False
+
+    try:
+        proto, dom = url.split("://", 1)
+        proto += "://"
+    except:
+        proto = "https://"
+        dom = url
+
+    dom = dom.split("/")[0]
+    msg = "\n\033[1;31m\nerror:\n  could not locate certificate for domain [{}],\n  please open Internet Explorer (not chrome/firefox/other) and\n  access the following URL so Windows loads up the certificate:\n    {}/\n\033[0m"
+    eprint(msg.format(dom, proto + dom))
+
+    eprint("\npress enter to exit")
+    input()
+    sys.exit(1)
 
 
 def find_dep(fn):
@@ -257,7 +291,12 @@ def assert_ffmpeg():
     zp = os.path.join(TMPDIR, "ffmpeg.zip")
     if not os.path.exists(zp):
         eprint("downloading FFmpeg...")
-        r = urllib.request.urlopen(URL_FFMPEG)
+        try:
+            r = urllib.request.urlopen(URL_FFMPEG)
+        except Exception as ex:
+            if not need_ie(URL_FFMPEG, ex):
+                raise
+
         with open(zp, "wb") as f:
             while True:
                 buf = r.read(4096)
@@ -288,6 +327,38 @@ def assert_ffmpeg():
     sys.exit(1)
 
 
+def fix_cookies():
+    # chat-downloader needs expiration on cookies
+    try:
+        with open(COOKIES, "r") as f:
+            cookies = f.read()
+    except:
+        eprint("\033[1;31mcould not read cookiejar\033[0m")
+        return
+
+    # eprint("\n\ncookies-pre:\n" + cookies + "\n\n")
+
+    fixed = []
+    ptn = re.compile("^" + (r"([^\t]+)\t" * 6) + "(.*)")
+    for ln in cookies.split("\n"):
+        m = ptn.match(ln)
+        if not m or ln.startswith("#"):
+            fixed.append(ln)
+            continue
+
+        vals = list(m.groups())
+        if not int(vals[4]):
+            vals[4] = int(time.time()) + 60 * 60 * 24 * 7
+
+        fixed.append("\t".join([str(x) for x in vals]))
+
+    cookies = "\n".join(fixed)
+    with open(COOKIES, "w") as f:
+        f.write(cookies)
+
+    # eprint("\n\ncookies-post:\n" + cookies + "\n\n")
+
+
 def act(cmd, url):
     try:
         ffloc = None
@@ -301,20 +372,22 @@ def act(cmd, url):
         "ffmpeg_location": ffloc,
         "prefer_ffmpeg": True,
         "writesubtitles": True,
+        # "writeautomaticsub": True,
         "allsubtitles": True,
         "writedescription": True,
         "writeinfojson": True,
+        "cookiefile": COOKIES,
     }
 
     if "twitter.com" in url:
         opts["outtmpl"] = "tw-%(id)s-%(uploader_id)s - %(uploader)s.%(ext)s"
 
-    #import pudb; pu.db
+    # import pudb; pu.db
 
     try:
         import youtube_dl
     except Exception as ex:
-        eprint('will download youtube-dl because:\n  ' + repr(ex))
+        eprint("will download youtube-dl because:\n  " + repr(ex))
         download_ytdl()
         try:
             import youtube_dl
@@ -350,29 +423,37 @@ def act(cmd, url):
         opts["progress_hooks"] = hooks
 
         links = list(x for x in url.split(" ") if x)
-        eprint('\ndownloading {} links...'.format(len(links)))
+        eprint("\ndownloading {} links...".format(len(links)))
 
         for url in links:
             if not url.strip():
                 continue
 
-            if cmd == "f":
-                opt2 = opts.copy()
-                opt2["listformats"] = True
-                with youtube_dl.YoutubeDL(opt2) as ydl:
-                    inf = ydl.extract_info(url)
+            try:
+                if cmd == "f":
+                    opt2 = opts.copy()
+                    opt2["listformats"] = True
+                    with youtube_dl.YoutubeDL(opt2) as ydl:
+                        inf = ydl.extract_info(url)
 
-                eprint("\nenter list of formats to download, separate with space:")
-                eprint("fmts> ", end="")
+                    eprint("\nenter list of formats to download, separate with space:")
+                    eprint("fmts> ", end="")
 
-                opts["format"] = input().replace(" ", "+")
+                    opts["format"] = input().replace(" ", "+")
 
-            with youtube_dl.YoutubeDL(opts) as ydl:
-                inf = ydl.extract_info(url, download=True)
-                vids = inf.get('entries', [inf])
-                #print(json.dumps(inf, sort_keys=True, indent=4))
-                grab_chats(vids)
+                with youtube_dl.YoutubeDL(opts) as ydl:
+                    inf = ydl.extract_info(url, download=True)
+                    vids = inf.get("entries", [inf])
+                    # eprint(json.dumps(inf, sort_keys=True, indent=4))
 
+            except Exception as ex:
+                if not need_ie(url, ex):
+                    raise
+
+            fix_cookies()
+            grab_chats(vids)
+
+        fix_cookies()
         return
 
     raise Exception("\n\n  no comprende\n")
@@ -386,13 +467,13 @@ def final_cb(d):
 def grab_chats(vids):
     items = []
     for vid in vids:
-        if vid['extractor'] != 'youtube':
+        if vid["extractor"] != "youtube":
             continue
 
         for fn in created_files:
-            v_id = vid['id']
-            if f'-{v_id}.' in fn:
-                items.append([vid['webpage_url'], v_id, fn])
+            v_id = vid["id"]
+            if f"-{v_id}." in fn:
+                items.append([vid["webpage_url"], v_id, fn])
                 break
 
     if not items:
@@ -401,15 +482,16 @@ def grab_chats(vids):
     try:
         import chat_downloader
     except:
-        eprint('could not find chat downloader, will not grab chats')
+        eprint("could not find chat downloader, will not grab chats")
         return
 
     for url, v_id, fn in items:
-        fn = fn.rsplit('.', 1)[0]
-        if not fn.endswith(v_id) and '.' in fn:
-            fn = fn.rsplit('.', 1)[0]
+        fn = fn.rsplit(".", 1)[0]
+        if not fn.endswith(v_id) and "." in fn:
+            fn = fn.rsplit(".", 1)[0]
 
-        fn += '.json'
+        # fmt: off
+        fn += ".json"
         cmd = [
             sys.executable, "-m", "chat_downloader",
             "--chat_type", "live",
@@ -417,16 +499,22 @@ def grab_chats(vids):
             "--sort_keys",
             "--indent", "2",
             "-o", fn,
-            url
         ]
+        # fmt: on
+
+        if os.path.exists(COOKIES):
+            cmd.extend(["-c", COOKIES])
+
+        cmd.append(url)
+
         if WINDOWS:
             scmd = " ".join(f'"{x}"' for x in cmd)
         else:
             scmd = " ".join(shlex.quote(x) for x in cmd)
 
-        eprint(f'\nchat-dl: {scmd}')
+        eprint(f"\nchat-dl: {scmd}")
         if os.path.exists(fn):
-            eprint('chat json already exists, will not download')
+            eprint("chat json already exists, will not download")
             return
 
         try:
@@ -434,29 +522,46 @@ def grab_chats(vids):
             if not os.path.exists(fn):
                 # may exit 0 even if it failed
                 raise Exception()
-            
-            eprint('chat download okke')
+
+            eprint("chat download okke")
             chatconv(fn)
         except:
-            eprint(f'chat download fug: {scmd}')
+            eprint(f"chat download fug: {scmd}")
 
 
 def chatconv(fn):
     try:
         import softchat
     except:
-        eprint('could not find chat converter, will not create softsubs')
+        eprint("could not find chat converter, will not create softsubs")
         return
 
+    # fmt: off
     cmd = [
         sys.executable, "-m", "softchat",
-        "-m2", fn
+        "-m2",
+        "--no_del",
+        "--emote_font",
+        "--emote_cache", "emotes",
+        "--emote_sz", "1.6",
+        "--emote_install",
+        "--no_errdep_emotes",
+        fn,
     ]
+    # fmt: on
+
+    if WINDOWS:
+        scmd = " ".join(f'"{x}"' for x in cmd)
+    else:
+        scmd = " ".join(shlex.quote(x) for x in cmd)
+
+    eprint(f"\nchat-conv: {scmd}")
+
     try:
         sp.check_call(cmd)
-        eprint('chat convert okke')
+        eprint("chat convert okke")
     except:
-        eprint('chat convert fug')
+        eprint(f"chat convert fug: {scmd}")
 
 
 def oggify_cb(d):
@@ -494,6 +599,7 @@ def oggify_cb(d):
 
 
 def main():
+    os.system("")
     if sys.version_info[0] == 2:
         eprint("\n\npy2 kinshi, download python3\n")
         sys.exit(1)
