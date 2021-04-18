@@ -27,7 +27,6 @@ import shutil
 import argparse
 import tempfile
 import colorsys
-import queue
 import multiprocessing
 import subprocess as sp
 from PIL import Image
@@ -107,12 +106,30 @@ def cache_emotes(emotes, emote_dir, overwrite):
 
         if not source_ok:
             url = None
+            alts = []
+            best = 0
             for img in e["images"]:
                 if img["id"] == "source":
                     url = img["url"]
+                    break
+
+                w = img["width"]
+                if w < best:
+                    continue
+                
+                if w > best:
+                    best = w
+                    alts = []
+                
+                alts.append(img)
+                if "dark" in img["id"]:
+                    url = img["url"]
+            
+            if url is None and alts:
+                url = alts[-1]["url"]
 
             if url is None:
-                error(f"Could not find source URL for {e['name']}")
+                error(f"Could not find URL for {e['name']}")
                 sys.exit(1)
 
             r = requests.get(url)
@@ -394,6 +411,21 @@ def main():
                     deleted_messages.add(m["target_message_id"])
                 elif at == "mark_chat_items_by_author_as_deleted":
                     deleted_authors.add(m["author"]["id"])
+                
+                if at is None and "message" in m:
+                    # twitch
+                    msg = m["message"]
+                    at = "add_chat_item"
+                    for emote in m.get("emotes", []):
+                        if "shortcuts" in emote:
+                            warn(f"expected no shortcuts, got [{emote['shortcuts']}]")
+                            continue
+
+                        shortcut = ":" + emote["name"] + ":"
+                        msg = msg.replace(emote["name"], shortcut)
+                        emote["shortcuts"] = [shortcut]
+                    
+                    m["message"] = msg
 
                 if (
                     at != "add_chat_item"
