@@ -214,19 +214,14 @@ def ytdl_updatechk():
 
 
 def download_ytdl():
-    sp.check_call(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            "-t",
-            PYDIR,
-            "-U",
-            YTDL_PIP,
-        ]
-    )
+    # fmt: off
+    sp.check_call([
+        sys.executable, "-m", "pip",
+        "install", "-U",
+        "--disable-pip-version-check",
+        "-t", PYDIR, YTDL_PIP,
+    ])
+    # fmt: on
 
 
 def tui_updatechk():
@@ -359,6 +354,13 @@ def assert_ffmpeg():
 
     eprint("failed to unpack FFmpeg (bad zip or bad code (who am i kidding))")
     sys.exit(1)
+
+
+def check_call(*args, **kwargs):
+    env = os.environ.copy()
+    env["PATH"] = os.pathsep.join([TMPDIR, env["PATH"]])
+    kwargs["env"] = env
+    sp.check_call(*args, **kwargs)
 
 
 def fix_cookies():
@@ -552,7 +554,7 @@ def grab_chats(vids):
             return
 
         try:
-            sp.check_call(cmd)
+            check_call(cmd)
             if not os.path.exists(fn):
                 # may exit 0 even if it failed
                 raise Exception()
@@ -592,7 +594,7 @@ def chatconv(fn):
     eprint(f"\nchat-conv: {scmd}")
 
     try:
-        sp.check_call(cmd)
+        check_call(cmd)
         eprint("chat convert okke")
     except:
         eprint(f"chat convert fug: {scmd}")
