@@ -116,15 +116,15 @@ def cache_emotes(emotes, emote_dir, overwrite):
                 w = img["width"]
                 if w < best:
                     continue
-                
+
                 if w > best:
                     best = w
                     alts = []
-                
+
                 alts.append(img)
                 if "dark" in img["id"]:
                     url = img["url"]
-            
+
             if url is None and alts:
                 url = alts[-1]["url"]
 
@@ -411,7 +411,7 @@ def main():
                     deleted_messages.add(m["target_message_id"])
                 elif at == "mark_chat_items_by_author_as_deleted":
                     deleted_authors.add(m["author"]["id"])
-                
+
                 if at is None and "message" in m:
                     # twitch
                     msg = m["message"]
@@ -424,7 +424,7 @@ def main():
                         shortcut = ":" + emote["name"] + ":"
                         msg = msg.replace(emote["name"], shortcut)
                         emote["shortcuts"] = [shortcut]
-                    
+
                     m["message"] = msg
 
                 if (
@@ -710,9 +710,8 @@ def main():
     for n_msg, msg, vtxt, vsz, t_fsec, t_hms, msg_emotes in gen_msgs(
         jd, vw, bw, ar, emote_shortcuts, have_fugashi
     ):
-        # pillow height calculation is off by a bit; this is roughly it i think
         sx, sy = vsz
-        sy = int(sy + fofs * 2.5 + 0.8)
+        sy = int(sy - 10)
 
         if n_msg % 1000 == 0:
             info(
@@ -853,32 +852,45 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
             if ar.m == 1:
                 # text = colored nick followed by the actual lines, ass-escaped
-                txt = [rf"{{\3c&H{bgr_nick}&}}{nick}"]
+                txt = [rf"{{\3c&H{bgr_nick}&\fs{ar.sz*0.67}}}{nick}"]
+                lineh = z.emote_vsz[1]
+                nickh = lineh * 0.7
 
                 badges = msg.get("badges", [])
                 if not set(badges).isdisjoint(["Moderator", "Owner", "Verified"]):
-                    txt[-1] += r" {\bord16\shad6}*"
+                    txt[0] += r" {\bord16\shad6}*"
                 elif msg["uid"] in vips:
-                    txt[-1] += r" {\bord16\shad4}----"
+                    txt[0] += r" {\bord16\shad4}----"
 
                 if shrimp:
-                    txt.append(shrimp)
+                    txt.append(rf"{{\fscx90\fscy90}}{shrimp}{{\fscx100\fscy100}}")
+                    msg["sy"] += lineh
 
                 txt.extend(msg["txt"])
+                txt[1] = rf"{{\fs{ar.sz}}}{txt[1]}"
+
+                if msg["msg_emotes"] and (
+                    ar.emote_fill or filled_emotes or ar.emote_sz > 1.01
+                ):
+                    txt = "\n".join(txt)
+                    msegs = segment_msg(txt, ar.emote_fill, filled_emotes)
+                    txt = render_msegs(
+                        msegs, ar.sz, ar.sz * ar.emote_sz, bgr_msg, bgr_fg, bord, shad
+                    )
+                    txt = txt.split("\n")
 
                 # show new messages bottom-left (heh)
                 msg["txt"] = txt
                 msg["px"] = bx
-                msg["py"] = by + bh
+                msg["py"] = by + bh - msg["sy"] - nickh
 
                 ta = hms(msg["t0"])
                 tb = hms(next_msg["t0"] if next_msg else msg["t0"] + 10)
 
                 rm = 0
                 for m in vis:
-                    # i'll be honest, no idea why the *1.2 is necessary
-                    m["py"] -= msg["sy"] * 1.2
-                    if m["py"] - m["sy"] < by:
+                    m["py"] -= msg["sy"] + nickh
+                    if m["py"] < by:
                         # debug('drop {} at {}'.format(hms(m["t0"]), ta))
                         rm += 1
 
@@ -893,34 +905,32 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                             txt += pad + ln + r"\N{\r}"
                             pad = r"\h\h"
 
-                    f.write(
-                        "Dialogue: 0,{},{},a,,0,0,0,,{}\n".format(ta, tb, txt).encode(
-                            "utf-8"
-                        )
-                    )
+                    f.write(f"Dialogue: 0,{ta},{tb},a,,0,0,0,,{txt}\n".encode("utf-8"))
                 else:
-                    # old approach, one ass entry for each line
+                    # verification, one ass entry for each line
                     for m in vis:
-                        step = m["sy"] / len(m["txt"])
+                        step = nickh
                         x = m["px"]
                         y = m["py"]
                         for ln in m["txt"]:
                             txt = r"{{\pos({},{})}}{}".format(x, y, ln)
                             x = m["px"] + 8
                             y += step
-                            f.write(
-                                "Dialogue: 0,{},{},a,,0,0,0,,{}\n".format(
-                                    ta, tb, txt
-                                ).encode("utf-8")
-                            )
+                            step = m["sy"] / (len(m["txt"]) - 1)
+                            txt = f"Dialogue: 0,{ta},{tb},a,,0,0,0,,{txt}\n"
+                            f.write(txt.encode("utf-8"))
+
             else:
                 txts, t0, w, h, msg_emotes = [
                     msg[x] for x in ["txt", "t0", "sx", "sy", "msg_emotes"]
                 ]
                 txt = "\\N".join(txts)
 
+                lineh = z.emote_vsz[1]
+                nickh = lineh * 0.6
+
                 # ass linespacing is huge, compensate (wild guess btw)
-                h += int(ar.sz * 0.25 * (len(txts) - 1) + 0.99)
+                h += int(ar.sz * 0.25 * (len(txts) - 1) + 0.99 + nickh)
 
                 # plus some horizontal margin between the messages
                 w += 8
@@ -1227,13 +1237,13 @@ r"""
 
 ===[ side-by-side with kanji transcription ]===========================
 
-chat_replay_downloader.py https://www.youtube.com/watch?v=7LXgVlrfsWw -output ars-37-minecraft-3.json
+ytdl-tui.py https://www.youtube.com/watch?v=7LXgVlrfsWw
 
-softchat.py ..\yt\ars-37-minecraft-3.json -b 340x500+32+32 && copy /y ..\yt\ars-37-minecraft-3.ass ..\yt\ars-37-minecraft-3.1.ass
+softchat.py ..\yt\ars-37-minecraft-3.json -b 360x500+24+40 --sz 26 --emote_font --emote_sz 1.8 && copy /y ..\yt\ars-37-minecraft-3.ass ..\yt\ars-37-minecraft-3.1.ass
 
-softchat.py ..\yt\ars-37-minecraft-3.json -b 340x500+360+32 --kana && copy /y ..\yt\ars-37-minecraft-3.ass ..\yt\ars-37-minecraft-3.2.ass
+softchat.py ..\yt\ars-37-minecraft-3.json -b 360x500+300+40 --sz 26 --emote_font --emote_sz 1.8 --kana && copy /y ..\yt\ars-37-minecraft-3.ass ..\yt\ars-37-minecraft-3.2.ass
 
-(head -n 21 ars-37-minecraft-3.1.ass ; (tail -n +22 ars-37-minecraft-3.1.ass; tail -n +22 ars-37-minecraft-3.2.ass) | sort) > ars-37-minecraft-3.ass
+(head -n 22 ars-37-minecraft-3.1.ass ; (tail -n +23 ars-37-minecraft-3.1.ass; tail -n +23 ars-37-minecraft-3.2.ass) | sort) > ars-37-minecraft-3.ass
 
 c:\users\ed\bin\mpv.com "..\yt\ars-37-minecraft-3.json.mkv" -ss 1:15:20
 
