@@ -5,6 +5,13 @@ import sys
 # takes an ass file and shows how many messages there are within a 30sec window at each time
 # for example to see where a youtube/twitch chatlog is hype
 # (see https://github.com/9001/softchat/ for that)
+#
+# example: list the most active parts of a vid
+#  chat-heatmap.py some.ass | sort -n
+#
+# example: list the most explosive parts (chat going from idle to 3x activity)
+#  chat-heatmap.py some.ass | awk '$1>p*3{printf "\n%s\n%s\n",p,$0} {p=$0}'
+
 
 stack = []
 basets = 0
@@ -28,7 +35,9 @@ with open(sys.argv[1], "rb") as f:
             maxts = ts
 
         if ts > basets + 30:
-            print("{} {}".format(maxnum, maxts))
+            m, s = divmod(int(maxts), 60)
+            h, m = divmod(m, 60)
+            print(f"{maxnum:4d} {maxts:5.0f}  {h}:{m:02d}:{s:02d}")
             basets = ts
             maxnum = 0
             maxts = 0
