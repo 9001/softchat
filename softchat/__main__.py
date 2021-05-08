@@ -941,12 +941,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     shrimp_mul = 2
                     w += h * 4  # donation is not included, TODO maybe
 
-                if "badges" in msg and "Moderator" in msg["badges"]:
+                vip = False
+                badges = msg.get("badges", [])
+                if not set(badges).isdisjoint(["Moderator", "Owner", "Verified"]):
                     bord = shad = 6
                     txt = rf"{{\bord24\shad{shad}}}*{{\bord{bord}}}{txt}"
+                    vip = True
                 elif msg["uid"] in vips:
                     bord = shad = 4
                     txt = rf"{{\bord16\shad{shad}}}_{{\bord{bord}}}{txt}"
+                    vip = True
 
                 len_boost = 0.7
                 td = (vw + w - w * len_boost) * shrimp_mul / ar.spd
@@ -1116,7 +1120,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     hms(t0), hms(msg["t1"]), msg["txt"]
                 ).encode("utf-8")
 
-                if shrimp:
+                if shrimp or vip:
                     supers.append(ln)
                 else:
                     f.write(ln)
