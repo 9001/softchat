@@ -56,7 +56,7 @@ def render_msegs(msegs, tsz, esz, bg, fg, bord, shad):
         cmd = ""
 
         if plv < 1 and lv > 0:
-            cmd += f"\\fs{esz}"
+            cmd += f"\\fs{esz:.1f}"
 
         if plv < 2 and lv > 1:
             # compensate the 1100 padding in fff by subtracting a constant,
@@ -65,13 +65,13 @@ def render_msegs(msegs, tsz, esz, bg, fg, bord, shad):
             # and bump this a bit to shift some of the padding to the left
             fsp = esz / 0.9111  # 0.9091
 
-            cmd += f"\\c&H{bg}\\fscx{scx}\\fsp-{fsp}}}\ue000{{\\fscx100\\fsp0\\c&H{fg}\\1a&H00&\\bord1\\shad0"
+            cmd += f"\\c&H{bg}\\fscx{scx:.2f}\\fsp-{fsp:.2f}}}\ue000{{\\fscx100\\fsp0\\c&H{fg}\\1a&H00&\\bord1\\shad0"
 
         if plv > 1 and lv < 2:
             cmd += f"\\bord{bord}\\shad{shad}"
 
         if plv > 0 and lv < 1:
-            cmd += f"\\fs{tsz}"
+            cmd += f"\\fs{tsz:.1f}"
 
         plv = lv
         if cmd:
