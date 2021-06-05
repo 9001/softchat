@@ -17,15 +17,13 @@ except:
     print("Could not identify video ID")
     sys.exit(1)
 
-
 resp = requests.get(
-    f"https://www.youtube.com/get_video_info?video_id={vid}"
+    f"https://www.youtube.com/get_video_info?video_id={vid}&html5=1"
 ).content.decode("utf-8")
 
 jsn = json.loads(urllib.parse.parse_qs(resp)["player_response"][0])
 
-startTime = jsn["microformat"]["playerMicroformatRenderer"]["liveBroadcastDetails"][
-    "startTimestamp"
-]
+startTime = jsn["microformat"]["playerMicroformatRenderer"][
+    "liveBroadcastDetails"]["startTimestamp"]
 
 print(int(datetime.datetime.fromisoformat(startTime).timestamp()))
