@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """ytdl-tui.py: interactive youtube-dl frontend"""
-__version__ = "1.6"
+__version__ = "1.7"
 __author__ = "ed <irc.rizon.net>"
 __url__ = "https://github.com/9001/softchat/"
 __credits__ = ["stackoverflow.com"]
@@ -41,9 +41,11 @@ optional steps to avoid captchas, and to download members-only videos:
 -----------------------------------------------------------------------
 
 new in this version:
-* support youtube-dl forks
-* grab and convert chat from twitch as well
-* replace the old zeranoe ffmpeg with latest stable btbn from github
+* channel/playlist download with progress tracking
+* change from youtube-dl to yt-dlp
+* avoid youtube speed throttles by restarting the download
+* download live-chat with both yt-dlp and chat_downloader
+  * because chat_downloader also grabs the emotes
 
 -----------------------------------------------------------------------
 
@@ -82,8 +84,8 @@ def eprint(*args, **kwargs):
 # youtube-dl fork to use (last assignment wins), format: [ pip, import ]
 # also see https://github.com/animelover1984/youtube-dl
 YTDL_FORK = [ "youtube-dlc", "youtube_dlc" ]  # https://github.com/blackjack4494/yt-dlc
-YTDL_FORK = [ "yt-dlp",      "yt_dlp"      ]  # https://github.com/yt-dlp/yt-dlp  (best?)
 YTDL_FORK = [ "youtube-dl",  "youtube_dl"  ]  # https://github.com/ytdl-org/youtube-dl  (the OG)
+YTDL_FORK = [ "yt-dlp",      "yt_dlp"      ]  # https://github.com/yt-dlp/yt-dlp  (best?)
 
 # latest version
 URL_SELF = "https://raw.githubusercontent.com/9001/softchat/hovedstraum/contrib/ytdl-tui.py"
@@ -413,6 +415,8 @@ def act(cmd, url):
         "writedescription": True,
         "writeinfojson": True,
         "cookiefile": COOKIES,
+        "throttledratelimit": 128 * 1024,
+        "ignoreerrors": True,
     }
 
     if "twitter.com" in url:
@@ -423,12 +427,12 @@ def act(cmd, url):
     try:
         youtube_dl = __import__(YTDL_IMP)
     except Exception as ex:
-        eprint("will download youtube-dl because:\n  " + repr(ex))
+        eprint(f"will download {YTDL_PIP} because:\n  {ex!r}\n")
         download_ytdl()
         try:
             youtube_dl = __import__(YTDL_IMP)
         except Exception as ex:
-            eprint("\n\n  failed to load youtube-dl :(\n  pls screenshot this\n")
+            eprint(f"\n\n  failed to load {YTDL_PIP} :(\n  pls screenshot this\n")
             eprint(repr(ex))
             eprint(sys.path)
             eprint(TMPDIR)
@@ -461,10 +465,12 @@ def act(cmd, url):
         links = list(x for x in url.split(" ") if x)
         eprint(f"\ndownloading {len(links)} links...")
 
+        cwd = os.path.abspath(os.getcwd())
         for url in links:
             if not url.strip():
                 continue
 
+            os.chdir(cwd)
             try:
                 if cmd == "f":
                     opt2 = opts.copy()
@@ -476,6 +482,31 @@ def act(cmd, url):
                     eprint("fmts> ", end="")
 
                     opts["format"] = input().replace(" ", "+")
+
+                opts.pop("download_archive", None)
+                dn = url.split("/channel/")
+                if len(dn) == 1:
+                    dn = url.split("playlist?list=")
+
+                if len(dn) == 2:
+                    dn = dn[1]
+                    for ch in ["/", "?", "&"]:
+                        dn = dn.split(ch)[0]
+
+                    if not os.path.isdir(dn):
+                        os.mkdir(dn)
+
+                    os.chdir(dn)
+
+                    fp = f"../{COOKIES}"
+                    if os.path.exists(fp):
+                        shutil.copy2(fp, COOKIES)
+
+                    lfn = "downloaded.ids"
+                    opts["download_archive"] = lfn
+
+                    m = f"\ndownloading entire channel with progress tracking to {dn}/{lfn}\n"
+                    eprint(m)
 
                 with youtube_dl.YoutubeDL(opts) as ydl:
                     inf = ydl.extract_info(url, download=True)
@@ -500,18 +531,70 @@ def final_cb(d):
         created_files.append(d["filename"])
 
 
+def get_fname(fns, id):
+    fn = [x for x in fns if f"-{id}." in x or f" [{id}]." in x]
+    if not fn:
+        return f"untitled-{id}.mkv"
+
+    fn = fn[0]
+    while id in fn.rsplit(".", 1)[0]:
+        fn = fn.rsplit(".", 1)[0]
+        if "." not in fn:
+            break
+
+    vfiles = []
+    for fx in fns:
+        if fn not in fx:
+            continue
+
+        sz = os.path.getsize(fx)
+        vfiles.append([sz, fx])
+
+    return list(sorted(vfiles))[-1][1]
+
+
 def grab_chats(vids):
+    fns = os.listdir(".")
     items = []
     for vid in vids:
+        if not vid:
+            continue  # privated, deleted
+
         if vid["extractor"] not in ["youtube", "twitch"]:
             continue
 
-        for fn in created_files:
-            v_id = vid["id"]
-            if f"-{v_id}." in fn or f" [{v_id}]." in fn:
-                items.append([vid["webpage_url"], v_id, fn])
-                break
+        v_id = vid["id"]
+        fn = get_fname(fns, v_id)
+        items.append([vid["webpage_url"], v_id, fn])
 
+    ##
+    ## chats for channel-archive
+
+    ids = []
+    try:
+        with open("downloaded.ids", "rb") as f:
+            ids = f.read().decode("utf-8").split("\n")
+            ids = [x.split(" ")[1].strip() for x in ids if x.startswith("youtube ")]
+    except:
+        print("aa")
+        pass
+
+    for id in ids:
+        fn = get_fname(fns, id)
+        if os.path.exists(fn + ".json"):
+            continue
+
+        items.append([f"https://www.youtube.com/watch?v={id}", id, fn])
+
+    ## end channel-archive
+    ##
+
+    i2 = []
+    for x in items:
+        if x not in i2:
+            i2.append(x)
+
+    items = i2
     if not items:
         return
 
