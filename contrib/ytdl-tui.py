@@ -49,6 +49,20 @@ new in this version:
 
 -----------------------------------------------------------------------
 
+HOWTO: download member's only content
+* first install the cookies.txt addon: https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/
+* save the cookies as "cookies.txt" inside the folder where you download your videos
+(as a bonus, this might also get around some download restrictions)
+
+-----------------------------------------------------------------------
+
+HOWTO: download all members-only videos from a channel and nothing else
+* take the channel URL, for example https://www.youtube.com/channel/UCyl1z3jo3XHR1riLFKG5UAg
+* replace UC with UUMO, for example https://www.youtube.com/channel/UUMLyl1z3jo3XHR1riLFKG5UAg
+* give that URL to this script after doing the cookies.txt stuff above
+
+-----------------------------------------------------------------------
+
 how to ensure max audio quality (updated 2020-09-02, not-impl here):
 -f 'bestvideo+(251/141)/22/bestvideo+(258/256/140/250/249/139)'
 https://gist.github.com/AgentOak/34d47c65b1d28829bb17c24c04a0096f
