@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """ytdl-tui.py: interactive youtube-dl frontend"""
-__version__ = "1.7"
+__version__ = "1.8"
 __author__ = "ed <irc.rizon.net>"
 __url__ = "https://github.com/9001/softchat/"
 __credits__ = ["stackoverflow.com"]
@@ -41,11 +41,8 @@ optional steps to avoid captchas, and to download members-only videos:
 -----------------------------------------------------------------------
 
 new in this version:
-* channel/playlist download with progress tracking
-* change from youtube-dl to yt-dlp
-* avoid youtube speed throttles by restarting the download
-* download live-chat with both yt-dlp and chat_downloader
-  * because chat_downloader also grabs the emotes
+* fix chat download when title contains "."
+* print additional info when failing to load youtube-dl
 
 -----------------------------------------------------------------------
 
@@ -446,14 +443,15 @@ def act(cmd, url):
         try:
             youtube_dl = __import__(YTDL_IMP)
         except Exception as ex:
-            eprint(f"\n\n  failed to load {YTDL_PIP} :(\n  pls screenshot this\n")
+            eprint(f"\n\n   failed to load {YTDL_PIP} :(\n   pls screenshot this\n")
             eprint(repr(ex))
+            eprint(sys.executable)
             eprint(sys.path)
             eprint(TMPDIR)
             files = os.listdir(sys.path[0])
             eprint(files)
-            eprint("the end")
-            sys.exit(1)
+            eprint()
+            raise
 
     ok = False
     if cmd and cmd.startswith("a"):
@@ -619,8 +617,7 @@ def grab_chats(vids):
         return
 
     for url, v_id, fn in items:
-        fn = fn.rsplit(".", 1)[0]
-        if not fn.endswith(v_id) and "." in fn:
+        while len(fn.rsplit(".", 1)[1]) < 11:
             fn = fn.rsplit(".", 1)[0]
 
         # fmt: off
