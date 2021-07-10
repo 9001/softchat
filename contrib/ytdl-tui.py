@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """ytdl-tui.py: interactive youtube-dl frontend"""
-__version__ = "1.8"
+__version__ = "1.9"
 __author__ = "ed <irc.rizon.net>"
 __url__ = "https://github.com/9001/softchat/"
 __credits__ = ["stackoverflow.com"]
@@ -41,8 +41,7 @@ optional steps to avoid captchas, and to download members-only videos:
 -----------------------------------------------------------------------
 
 new in this version:
-* fix chat download when title contains "."
-* print additional info when failing to load youtube-dl
+* fix chat download when title does not contains "."
 
 -----------------------------------------------------------------------
 
@@ -588,7 +587,6 @@ def grab_chats(vids):
             ids = f.read().decode("utf-8").split("\n")
             ids = [x.split(" ")[1].strip() for x in ids if x.startswith("youtube ")]
     except:
-        print("aa")
         pass
 
     for id in ids:
@@ -617,8 +615,10 @@ def grab_chats(vids):
         return
 
     for url, v_id, fn in items:
-        while len(fn.rsplit(".", 1)[1]) < 11:
+        while v_id in fn.rsplit(".", 1)[0]:
             fn = fn.rsplit(".", 1)[0]
+            if "." not in fn:
+                break
 
         # fmt: off
         fn += ".json"
