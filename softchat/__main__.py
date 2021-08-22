@@ -413,6 +413,31 @@ def main():
                 elif at == "mark_chat_items_by_author_as_deleted":
                     deleted_authors.add(m["author"]["id"])
 
+                if "emotes" in m:
+                    customs = []
+                    stocks = []
+                    for x in m["emotes"]:
+                        if x.get("is_custom_emoji", True):
+                            customs.append(x)
+                        else:
+                            stocks.append(x)
+                    
+                    # only keep/convert the custom emotes
+                    m["emotes"] = customs
+
+                    # non-customs have regular unicode emojis as IDs,
+                    # so swap out the shortcuts with those instead
+                    for emote in stocks:
+                        uchar = emote["id"]
+                        if len(uchar) > 8:
+                            continue
+                        
+                        txt = m["message"]
+                        for sc in emote["shortcuts"]:
+                            txt = txt.replace(sc, uchar)
+                        
+                        m["message"] = txt
+
                 if at is None and "message" in m:
                     # twitch
                     msg = m["message"]
