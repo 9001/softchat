@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "1.2",
-    "date": "2021-04-01",
+    "version": "1.3",
+    "date": "2021-09-02",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
