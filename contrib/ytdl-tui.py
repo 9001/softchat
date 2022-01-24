@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """ytdl-tui.py: interactive youtube-dl frontend"""
-__version__ = "1.9"
+__version__ = "1.10"
 __author__ = "ed <irc.rizon.net>"
 __url__ = "https://github.com/9001/softchat/"
 __credits__ = ["stackoverflow.com"]
@@ -41,7 +41,7 @@ optional steps to avoid captchas, and to download members-only videos:
 -----------------------------------------------------------------------
 
 new in this version:
-* fix chat download when title does not contains "."
+* always print postprocess commands
 
 -----------------------------------------------------------------------
 
@@ -653,7 +653,7 @@ def grab_chats(vids):
                 # may exit 0 even if it failed
                 raise Exception()
 
-            eprint("chat download okke")
+            eprint(f"chat download okke: {scmd}")
             chatconv(fn)
         except:
             eprint(f"chat download fug: {scmd}")
@@ -689,7 +689,7 @@ def chatconv(fn):
 
     try:
         check_call(cmd)
-        eprint("chat convert okke")
+        eprint(f"chat convert okke: {scmd}")
     except:
         eprint(f"chat convert fug: {scmd}")
 
