@@ -2,8 +2,8 @@
 
 about = {
     "name": "softchat",
-    "version": "1.3",
-    "date": "2021-09-02",
+    "version": "1.4",
+    "date": "2022-01-24",
     "description": "convert twitch/youtube chat into softsubs",
     "author": "ed",
     "license": "MIT",
@@ -421,7 +421,7 @@ def main():
                             customs.append(x)
                         else:
                             stocks.append(x)
-                    
+
                     # only keep/convert the custom emotes
                     m["emotes"] = customs
 
@@ -431,11 +431,11 @@ def main():
                         uchar = emote["id"]
                         if len(uchar) > 8:
                             continue
-                        
+
                         txt = m["message"]
                         for sc in emote["shortcuts"]:
                             txt = txt.replace(sc, uchar)
-                        
+
                         m["message"] = txt
 
                 if at is None and "message" in m:

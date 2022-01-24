@@ -191,6 +191,7 @@ Similarly, rather than using `--emote_fill` to fill the background of all emotes
   * [fontforge](https://fontforge.org)
   * [ImageMagick](https://imagemagick.org)
   * [potrace](http://potrace.sourceforge.net/)  (not required on windows)
+  * **on debian:** `apt install potrace python3-fontforge`
 
 note: on windows, cmd must be reopened after installing dependencies
 
