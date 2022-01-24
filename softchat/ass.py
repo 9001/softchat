@@ -1,3 +1,6 @@
+ZEROWIDTH_SPACE = "\u200b"
+
+
 def assan(x):
     # there is no standardization on escaping ["{", "}", "\\"]:
     #   the commented one is for aegisub,
@@ -20,8 +23,10 @@ def assan(x):
 
     # mpv:
     #   there is no way to encode a literal \ before a markup {
-    #   so the lines must end with a whitespace
-    return ret + " "
+    if ret.endswith("\\"):
+        ret += ZEROWIDTH_SPACE
+
+    return ret
 
 
 def segment_msg(txt, fill_all, fill_list):
@@ -54,6 +59,9 @@ def render_msegs(msegs, tsz, esz, bg, fg, bord, shad):
     plv = 0
     for lv, txt in msegs + [[0, ""]]:
         cmd = ""
+
+        if not lv and txt.endswith("\\"):
+            txt += ZEROWIDTH_SPACE
 
         if plv < 1 and lv > 0:
             cmd += f"\\fs{esz:.1f}"
