@@ -35,6 +35,7 @@ from .util import WINDOWS, HAVE_FONTFORGE
 from .util import shell_esc, zopen, tt, hms, get_ff_dur, load_fugashi
 from .mproc import TextStuff, gen_msg_thr, gen_msg_initializer
 from .ass import assan, segment_msg, render_msegs
+from .fconv import convert_file
 
 
 try:
@@ -320,10 +321,10 @@ def main():
     if ar.media and os.path.isfile(ar.media):
         media_fn = ar.media
     else:
-        for ext in ["webm", "mp4", "mkv"]:
-            f = ar.fn[0]
-            while not media_fn and "." in f:
-                f = f.rsplit(".", 1)[0]
+        f = ar.fn[0]
+        while not media_fn and "." in f:
+            f = f.rsplit(".", 1)[0]
+            for ext in ["webm", "mp4", "mkv"]:
                 mfn = f + "." + ext
                 if os.path.isfile(mfn):
                     media_fn = mfn
@@ -334,7 +335,7 @@ def main():
                     media_fn = mfn
                     break
 
-    base_fn = ar.fn[0].rsplit(".json", 1)[0]
+    base_fn = ar.fn[0].rsplit(".json", 1)[0].rsplit(".live_chat", 1)[0]
     if media_fn:
         base_fn = media_fn.rsplit(".", 1)[0]
 
@@ -381,6 +382,18 @@ def main():
                 jd2 = json.load(f)
             except Exception as ex:
                 err = repr(ex)
+
+            if err and "Extra data" in err:
+                m = "input json is not a valid chat_downloader chatlog; trying to convert it..."
+                warn(m)
+                try:
+                    jd2 = list(convert_file(f))
+                    # debug("writing converted json")
+                    # with open(fn + ".conv.json", "w", encoding="utf-8") as cf:
+                    #     json.dump(jd2, cf, sort_keys=True, indent=2)
+                    err = None
+                except Exception as ex:
+                    err += "\nfconv: " + repr(ex)
 
             if not err and not jd2:
                 err = "empty json file?"
@@ -552,6 +565,29 @@ def main():
         unix_ofs = ar.start_time
 
     if unix_ofs is None and ar.offset is None:
+        # build a rough histogram of the first 5 minutes,
+        # the first burst of hype is probably close
+        info("cannot continue without --start_time; here are some hints:")
+        htime = -1
+        hcount = 0
+        hints = 0
+        htxt = ""
+        for x in jd:
+            t = int(x["timestamp"] / 1_000_000)
+            if htime == t:
+                hcount += 1
+                continue
+
+            if hcount:
+                info(f'{hcount} messages at start_time {htime} "{htxt}"')
+
+            htime = t
+            hcount = 1
+            htxt = x["message"]
+            hints += 1
+            if hints > 300:
+                break
+
         raise Exception(
             "could not find time_in_seconds in json, set a start time or offset "
             "manually with --start_time/--offset or use v0.17 or earlier"
