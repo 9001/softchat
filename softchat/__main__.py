@@ -1065,7 +1065,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 for m in rm:
                     vis.remove(m)
 
-                ymax = vh - h
+                ymax = bh - h
                 if ymax < 1:
                     ymax = 1  # thx emotes
 
@@ -1140,7 +1140,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 else:
                     y = None
                     best = 5318008
-                    target = vh / 2
+                    target = bh / 2
                     # print(json.dumps([target, frees], indent=4, sort_keys=True))
                     for avail, y0, y1 in frees:
                         if y0 <= target and y1 >= target + h:
@@ -1166,7 +1166,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     )
 
                 y = int(y)
-                txt = rf"{{\move({vw:.1f},{y+h:.1f},{-w:.1f},{y+h:.1f})\3c&H{bgr_nick}&}}{txt}{{\fscx40\fscy40\bord1}}\N{nick}"
+                txt = rf"{{\move({vw:.1f},{y+h+by:.1f},{-w:.1f},{y+h+by:.1f})\3c&H{bgr_nick}&}}{txt}{{\fscx40\fscy40\bord1}}\N{nick}"
 
                 msg["t1"] = t1
                 msg["p9"] = p9
