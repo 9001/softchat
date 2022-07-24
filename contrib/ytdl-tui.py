@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """ytdl-tui.py: interactive youtube-dl frontend"""
-__version__ = "1.10"
+__version__ = "1.11"
 __author__ = "ed <irc.rizon.net>"
 __url__ = "https://github.com/9001/softchat/"
 __credits__ = ["stackoverflow.com"]
@@ -41,7 +41,13 @@ optional steps to avoid captchas, and to download members-only videos:
 -----------------------------------------------------------------------
 
 new in this version:
-* always print postprocess commands
+* embed subs/font into mkv rather than install
+* borrow some yt-dlp config from hp
+  * embed metadata, thumbnail, subs, NOT infojson
+  * skip chatlog, leave it to chat_downloader
+* ...but not all of it
+  * don't prefer mp4
+  * don't sponsorblock
 
 -----------------------------------------------------------------------
 
@@ -419,18 +425,44 @@ def act(cmd, url):
     opts = {
         "ffmpeg_location": ffloc,
         "prefer_ffmpeg": True,
+        ##
+        ## subs
         "writesubtitles": True,
+        "embedsubtitles": True,
         # "writeautomaticsub": True,
-        "allsubtitles": True,
+        # "allsubtitles": True,
+        "subtitleslangs": ["all", "-live_chat"],
+        ##
+        ## embeds/meta
+        "writethumbnail": True,
         "writedescription": True,
         "writeinfojson": True,
+        "postprocessors": [
+            {
+                "key": "FFmpegMetadata",
+                "add_chapters": True,  # only for sponsorblock? w/e
+                "add_metadata": True,
+                "add_infojson": False,
+            },
+            {"key": "EmbedThumbnail", "already_have_thumbnail": True},
+        ],
+        ##
+        ## output
+        "windowsfilenames": True,
+        # "merge_output_format": "mp4",
+        ##
+        ## misc
         "cookiefile": COOKIES,
         "throttledratelimit": 128 * 1024,
         "ignoreerrors": True,
     }
 
     if "twitter.com" in url:
-        opts["outtmpl"] = "tw-%(id)s-%(uploader_id)s - %(uploader)s.%(ext)s"
+        zs = "tw-%(id)s-%(uploader_id)s - %(uploader)s.%(ext)s"
+    else:
+        zs = "[%(upload_date)s] [%(uploader,uploader_id|Unknown)s] %(fulltitle).100s (%(id)s).%(ext)s"
+
+    opts["outtmpl"] = zs
 
     # import pudb; pu.db
 
@@ -543,7 +575,7 @@ def final_cb(d):
 
 
 def get_fname(fns, id):
-    fn = [x for x in fns if f"-{id}." in x or f" [{id}]." in x]
+    fn = [x for x in fns if f"-{id}." in x or f" [{id}]." in x or f" ({id})." in x]
     if not fn:
         return f"untitled-{id}.mkv"
 
@@ -643,12 +675,12 @@ def grab_chats(vids):
             scmd = " ".join(shlex.quote(x) for x in cmd)
 
         eprint(f"\nchat-dl: {scmd}")
-        if os.path.exists(fn):
-            eprint("chat json already exists, will not download")
-            return
-
         try:
-            check_call(cmd)
+            if os.path.exists(fn):
+                eprint("chat json already exists, will not download")
+            else:
+                check_call(cmd)
+
             if not os.path.exists(fn):
                 # may exit 0 even if it failed
                 raise Exception()
@@ -674,7 +706,8 @@ def chatconv(fn):
         "--emote_font",
         "--emote_cache", "emotes",
         "--emote_sz", "1.6",
-        "--emote_install",
+        #"--emote_install",
+        "--embed_files",
         "--no_errdep_emotes",
         fn,
     ]
