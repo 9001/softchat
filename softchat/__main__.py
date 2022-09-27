@@ -274,6 +274,7 @@ def main():
     ap.add_argument("--kana", action="store_true", help="convert kanji to kana")
     ap.add_argument("--fontdir", metavar="DIR", type=str, default=None, help="path to noto-hinted")
     ap.add_argument("--dupe_thr", metavar="SEC", type=float, default=10, help="Hide duplicate messages from the same author within this many seconds")
+    ap.add_argument("--filter_gifts", action="store_true", help="Filter out the repetitive 'was gifted a membership by X' messages from gifted memberships")
     ap.add_argument("--no_del", action="store_true", help="keep msgs deleted by mods")
     ap.add_argument("--start_time", metavar="STRT", type=int, default=None, help="Start time of the video in as a unix timestamp in seconds. Only used when there is no VOD chat download.")
     ap.add_argument("--offset", metavar="OFS", type=float, default=None, help="Offset in seconds to apply to the chat. Positive values delay the chat, negative values advance the chat, the same as subtitle delay in MPV. Use with incomplete video downloads or when estimating the start time.")
@@ -425,6 +426,13 @@ def main():
                     deleted_messages.add(m["target_message_id"])
                 elif at == "mark_chat_items_by_author_as_deleted":
                     deleted_authors.add(m["author"]["id"])
+
+                if (
+                    ar.filter_gifts
+                    and m.get("message_type", None) == "sponsorships_gift_redemption_announcement"
+                ):
+                    continue
+
 
                 if "emotes" in m:
                     customs = []
