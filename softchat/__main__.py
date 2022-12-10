@@ -454,8 +454,9 @@ def main():
                             continue
 
                         txt = m["message"]
-                        for sc in emote["shortcuts"]:
-                            txt = txt.replace(sc, uchar)
+                        if emote["shortcuts"] is not None:
+                            for sc in emote["shortcuts"]:
+                                txt = txt.replace(sc, uchar)
 
                         m["message"] = txt
 
