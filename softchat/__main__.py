@@ -408,7 +408,7 @@ def main():
 
             if not err:
                 try:
-                    _ = jd2[0]["timestamp"]
+                    _ = jd2[0]["action_type"]
                 except:
                     err = "does not look like a chatlog"
 
