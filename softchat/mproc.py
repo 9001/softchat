@@ -46,7 +46,10 @@ class TextStuff(object):
         self.pad3 = ["\x00" * 1024 * 1024]
         self.imd = ImageDraw.Draw(self.im)
         self.pad4 = ["\x00" * 1024 * 1024]
-        self.pipe_width = self.font.getsize("|")[0]
+        if hasattr(self.font, "getsize"):
+            self.pipe_width = self.font.getsize("|")[0]
+        else:
+            self.pipe_width = self.font.getlength("|")
         # LD_PRELOAD=/usr/lib/libtcmalloc_debug.so ^ memory stomping bug: a word after object has been ocrrupted
         self.pad5 = ["\x00" * 1024 * 1024]
         self.font_ofs = self.font.getmetrics()[1]
@@ -154,7 +157,14 @@ class TextStuff(object):
         if msg_emotes:
             text = self.unemote(text)
 
-        w, h = self.imd.textsize("|" + text.replace("\n", "\n|"), self.font)
+        if hasattr(self.imd, "textsize"):
+            w, h = self.imd.textsize("|" + text.replace("\n", "\n|"), self.font)
+        else:
+            left, top, right, bottom = self.imd.multiline_textbbox(
+                (0, 0), "|" + text.replace("\n", "\n|"), stroke_width=1, font=self.font
+            )
+            w = right - left
+            h = bottom - top
 
         if msg_emotes and self.emote_scale > 1.01:
             em_dw, em_dh = [x * self.emote_scale - x for x in self.emote_vsz]
@@ -201,7 +211,7 @@ class TextStuff(object):
         for w in words:
             offsets.append(offsets[-1] + self.vsize(w + "_", msg_emotes)[0])
 
-        minima = [0] + [10 ** 20] * count
+        minima = [0] + [10**20] * count
         breaks = [0] * (count + 1)
         for i in range(count):
             j = i + 1
