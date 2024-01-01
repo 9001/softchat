@@ -169,6 +169,8 @@ Similarly, rather than using `--emote_fill` to fill the background of all emotes
 
 * on windows, `--kana` requires python 3.8 or newer
 
+* on macos, `--kana` is currently busted in macports on sonoma
+
 
 # dependencies
 
@@ -192,6 +194,7 @@ Similarly, rather than using `--emote_fill` to fill the background of all emotes
   * [ImageMagick](https://imagemagick.org)
   * [potrace](http://potrace.sourceforge.net/)  (not required on windows)
   * **on debian:** `apt install potrace python3-fontforge`
+  * **on macos:** `port install imagemagick potrace fontforge`
 
 note: on windows, cmd must be reopened after installing dependencies
 

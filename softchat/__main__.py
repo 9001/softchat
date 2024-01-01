@@ -31,7 +31,7 @@ import multiprocessing
 import subprocess as sp
 from PIL import Image
 from .util import debug, info, warn, error, init_logger
-from .util import WINDOWS, HAVE_FONTFORGE
+from .util import HAVE_FONTFORGE, MACOS, WINDOWS
 from .util import shell_esc, zopen, tt, hms, get_ff_dur, load_fugashi
 from .mproc import TextStuff, gen_msg_thr, gen_msg_initializer
 from .ass import assan, segment_msg, render_msegs
@@ -157,7 +157,8 @@ def cache_emotes(emotes, emote_dir, overwrite):
                 # windows imagemagick doesn't seem to have potrace
                 fname = source_fname + ".png"
             else:
-                # macports does, most linux distros probably do
+                # macos will need some help later,
+                # linux distros are probably more sane
                 fname = source_fname + ".svg"
 
         e["filename"] = os.path.abspath(fname)
@@ -173,6 +174,7 @@ def cache_emotes(emotes, emote_dir, overwrite):
             debug(f"Reusing {e['name']:14} {fname}")
         else:
             info(f"Converting {e['name']:14} {fname}")
+            fname2 = source_fname + ".bmp" if MACOS else fname
             cmd = magick[:]
             # fmt: off
             cmd.extend([
@@ -191,7 +193,7 @@ def cache_emotes(emotes, emote_dir, overwrite):
                 "-contrast-stretch", "3%x9%",
                 "-channel", "rgb",
                 "-negate",
-                fname,
+                fname2,
             ])
             # fmt: on
 
@@ -200,6 +202,17 @@ def cache_emotes(emotes, emote_dir, overwrite):
                 error(f"Failed to convert {e['name']}")
                 warn(shell_esc(cmd))
                 sys.exit(1)
+
+            if MACOS:
+                # imagemagick invokes potrace with unsupported input format
+                cmd = "potrace --svg --output".split()
+                cmd += [fname, fname2]
+
+                completed = sp.run(cmd)
+                if completed.returncode != 0:
+                    error(f"Failed to convert {e['name']}")
+                    warn(shell_esc(cmd))
+                    sys.exit(1)
 
 
 def generate_font_with_ffpython(*args):
