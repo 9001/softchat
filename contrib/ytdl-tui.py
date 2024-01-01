@@ -492,15 +492,20 @@ def act(cmd, url):
                 "ao": "bestaudio[ext=webm]",
                 "a4": "bestaudio[ext=m4a]",
                 "a3": "bestaudio[ext=mp3]",
-            }[cmd]
+            }[cmd.rstrip("p")]
             ok = True
         except:
             raise Exception("\n\n  that's an invalid audio format fam\n")
 
     if ok or cmd in [None, "f"]:
         hooks = []
-        if cmd in ["a", "ao"]:
+        audio_only = False
+        if cmd in ("a", "ao", "ap", "aop"):
             hooks.append(oggify_cb)
+            audio_only = True
+
+            if cmd in ("ap", "aop"):
+                hooks.append(play_cb)
 
         hooks.append(final_cb)
         opts["progress_hooks"] = hooks
@@ -561,7 +566,8 @@ def act(cmd, url):
                     raise
 
             fix_cookies()
-            grab_chats(vids)
+            if not audio_only:
+                grab_chats(vids)
 
         fix_cookies()
         return
@@ -725,6 +731,15 @@ def chatconv(fn):
         eprint(f"chat convert okke: {scmd}")
     except:
         eprint(f"chat convert fug: {scmd}")
+
+
+def play_cb(d):
+    if d["status"] != "finished":
+        return
+
+    fn = d["filename"]
+    fn = fn.rsplit(".", 1)[0] + ".ogg"
+    sp.Popen(["mpv", fn])
 
 
 def oggify_cb(d):
