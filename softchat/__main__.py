@@ -253,6 +253,17 @@ def generate_font(emotes, font_fn, font_name, dont_write):
     return fff.gen_fonts(*args)
 
 
+def is_a_chatlog(jd):
+    try:
+        hits = 0
+        for je in jd[:32768]:
+            if "action_type" in je or "message" in je:
+                hits += 1
+        return hits > 0
+    except:
+        return False
+
+
 class Okay(
     argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter
 ):
@@ -419,11 +430,8 @@ def main():
                 except:
                     pass
 
-            if not err:
-                try:
-                    _ = jd2[0]["action_type"]
-                except:
-                    err = "does not look like a chatlog"
+            if not err and not is_a_chatlog(jd2):
+                err = "does not look like a chatlog"
 
             if err:
                 error(f"failed: {err}")
@@ -531,11 +539,8 @@ def main():
                 except:
                     pass
 
-            if not err:
-                try:
-                    _ = jd2[0]["timestamp"]
-                except:
-                    err = "does not look like a chatlog"
+            if not err and not is_a_chatlog(jd2):
+                err = "does not look like a chatlog"
 
             if err:
                 error(f"failed: {err}")
