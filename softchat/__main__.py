@@ -33,7 +33,7 @@ import subprocess as sp
 from PIL import Image
 from .util import debug, info, warn, error, init_logger
 from .util import HAVE_FONTFORGE, MACOS, WINDOWS
-from .util import shell_esc, zopen, tt, hms, get_ff_dur, load_fugashi
+from .util import shell_esc, zopen, tt, hms, get_ff_info, load_fugashi
 from .mproc import TextStuff, gen_msg_thr, gen_msg_initializer
 from .ass import assan, segment_msg, render_msegs
 from .fconv import convert_file
@@ -290,7 +290,7 @@ def main():
     # fmt: off
     ap.add_argument("-d", action="store_true", help="emable debug logging")
     ap.add_argument("-m", metavar="MODE", type=int, default=1, help="mode, 1=box, 2=danmaku")
-    ap.add_argument("-r", metavar="WxH", type=str, default="1280x720", help="video res")
+    ap.add_argument("-r", metavar="WxH", type=str, default=None, help="video res, defaults to 1280x720 or 720x1280 if a vertical video is detected")
     ap.add_argument("-b", metavar="WxH+X+Y", type=str, default=None, help="subtitle area")
     ap.add_argument("-j", metavar="CORES", type=int, default=0, help="number of cores to use (0=all, 1=single-threaded)")
     ap.add_argument("--sz", metavar="POINTS", type=int, default=0, help="font size")
@@ -386,14 +386,8 @@ def main():
         ar.sz = 18 if ar.m == 1 else 24
         info(f"fontsize {ar.sz} pt")
 
-    vw, vh = [int(x) for x in ar.r.split("x")]
-
-    bw, bh, bx, by = [
-        int(x) for x in re.split(r"[x,+]+", ar.b if ar.b else ar.r + "+0+0")
-    ]
 
     z = TextStuff(ar.sz, ar.fontdir, ar.emote_sz)
-    fofs = z.font_ofs
     emotes = dict()
 
     jd = []
@@ -408,6 +402,7 @@ def main():
                 jd2 = json.load(f)
             except Exception as ex:
                 err = repr(ex)
+                jd2 = None
 
             if err and "Extra data" in err:
                 m = "input json is not a valid chat_downloader chatlog; trying to convert it..."
@@ -426,7 +421,7 @@ def main():
 
             if not err:
                 try:
-                    if jd2.get("formats"):
+                    if jd2 and "formats" in jd2:
                         err = "this is a youtube-dl info file, not a chatlog"
                 except:
                     pass
@@ -438,9 +433,12 @@ def main():
                 error(f"failed: {err}")
                 sys.exit(1)
 
-            if jd2[0].get("author_id", None):
+            if jd2 and jd2[0].get("author_id", None):
                 info(f"Converting legacy chat json {fn} to new format")
                 jd2 = [convert_old(x) for x in jd2]
+
+            if not jd2:
+                continue
 
             for m in jd2:
                 at = m.get("action_type", None)
@@ -529,13 +527,14 @@ def main():
                 jd2 = json.load(f)
             except Exception as ex:
                 err = repr(ex)
+                jd2 = None
 
             if not err and not jd2:
                 err = "empty json file?"
 
             if not err:
                 try:
-                    if jd2.get("formats"):
+                    if jd2 and jd2.get("formats"):
                         err = "this is a youtube-dl info file, not a chatlog"
                 except:
                     pass
@@ -547,12 +546,13 @@ def main():
                 error(f"failed: {err}")
                 sys.exit(1)
 
-            for m in jd2:
-                # For now, assume emote shortcuts are unique so we can postpone processing them
-                if "emotes" in m:
-                    for e in m["emotes"]:
-                        if e["id"] not in emotes:
-                            emotes[e["id"]] = e
+            if jd2:
+                for m in jd2:
+                    # For now, assume emote shortcuts are unique so we can postpone processing them
+                    if "emotes" in m:
+                        for e in m["emotes"]:
+                            if e["id"] not in emotes:
+                                emotes[e["id"]] = e
 
     if ar.emote_font and len(emotes) == 0:
         info("No emotes found")
@@ -577,6 +577,7 @@ def main():
     use_018 = "; please use softchat v0.18 or older if your chat json was created with a chat_replay_downloader from before 2021-01-29-something"
     if not jd:
         raise Exception("no messages were loaded" + use_018)
+
 
     # jd.sort(key=operator.attrgetter("timestamp"))
     jd.sort(key=lambda x: x["timestamp"])
@@ -734,6 +735,7 @@ def main():
     cdur_msg = None
     cdur_err = "could not verify chat duration"
     v_dur = None
+    v_res = None
     if not media_fn:
         cdur_err += ": could not find media file"
     else:
@@ -746,7 +748,7 @@ def main():
                 if chat_dur < 4096 * 4096:
                     break
 
-            v_dur = get_ff_dur(media_fn)
+            v_dur, v_res = get_ff_info(media_fn)
             delta = abs(chat_dur - v_dur)
             perc = delta * 100.0 / max(v_dur, chat_dur)
             if delta > 60:
@@ -757,6 +759,25 @@ def main():
         except Exception as ex:
             media_fn = None
             cdur_err += ": " + repr(ex)
+
+
+    media_res = ar.r
+    if media_res is None:
+        if v_res is not None:
+            vid_w, vid_h = v_res
+            if vid_w >= vid_h:
+                media_res = "1280x720"
+            else:
+                media_res = "720x1280"
+                info(f"Detected vertical video, using resolution {media_res}")
+        else:
+            media_res = "1280x720"
+
+    vw, vh = [int(x) for x in media_res.split("x")]
+
+    bw, bh, bx, by = [
+        int(x) for x in re.split(r"[x,+]+", ar.b if ar.b else media_res + "+0+0")
+    ]
 
     if cdur_err:
         warn(cdur_err)

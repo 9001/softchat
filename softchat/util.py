@@ -227,7 +227,7 @@ def tt(s):
     return "{:d}:{:02d}".format(m, s)
 
 
-def get_ff_dur(fn):
+def get_ff_info(fn):
     # ffprobe -hide_banner -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 foo.mkv
     #   webm: n/a
     #   mkv: n/a
@@ -249,7 +249,7 @@ def get_ff_dur(fn):
                 "-select_streams",
                 "v:0",
                 "-show_entries",
-                "stream_tags=duration",
+                "stream_tags=width,height,duration",
                 "-show_entries",
                 "format=duration",
                 "-of",
@@ -258,12 +258,13 @@ def get_ff_dur(fn):
             ]
         )
         r = ret.decode("utf-8").strip().split("\n")
+        v_res = (int(r[0]), int(r[1]))
 
-        if len(r) == 2 and ":" in r[0]:
-            h, m, s = [float(x) for x in r[0].split(":")]
-            return 60 * (60 * h + m) + s
+        if len(r) == 4 and ":" in r[2]:
+            h, m, s = [float(x) for x in r[2].split(":")]
+            return 60 * (60 * h + m) + s, v_res
         else:
-            return float(r[-1])
+            return float(r[-1]), v_res
     elif fn.lower().endswith("mp4"):
         ret = sp.check_output(
             [
@@ -274,13 +275,15 @@ def get_ff_dur(fn):
                 "-select_streams",
                 "v:0",
                 "-show_entries",
-                "stream=duration",
+                "stream=width,height,duration",
                 "-of",
                 "default=noprint_wrappers=1:nokey=1",
                 fn,
             ]
         )
-        return float(ret.split(b"\n", 1)[0])
+        r = ret.decode("utf-8").strip().split("\n")
+        v_res = (int(r[0]), int(r[1]))
+        return float(r[2]), v_res
     elif fn.lower().endswith("webm"):
         ret = sp.check_output(
             [
@@ -289,12 +292,14 @@ def get_ff_dur(fn):
                 "-v",
                 "error",
                 "-show_entries",
-                "format=duration",
+                "format=width,height,duration",
                 "-of",
                 "default=noprint_wrappers=1:nokey=1",
                 fn,
             ]
         )
-        return float(ret)
+        r = ret.decode("utf-8").strip().split("\n")
+        v_res = (int(r[0]), int(r[1]))
+        return float(r[2]), v_res
     else:
         raise Exception(f"Unknown video format {fn}")
