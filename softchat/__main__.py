@@ -396,6 +396,16 @@ def main():
     seen = set()
     for fn in ar.fn:
         info(f"loading {fn}")
+
+        try:
+            with zopen(fn, "r", encoding="utf-8") as f:
+                t = f.read(8192).replace("\r", "").replace("\n", "")
+                if not re.match(r'\[.*\{.*".*:.*,', t):
+                    raise Exception("file does not contain typical json chracters")
+        except Exception as ex:
+            t = "\n\n   wanted a json file; this is probably not it:  %s\n\n%r"
+            raise Exception(t % (fn, ex))
+
         with zopen(fn, "r", encoding="utf-8") as f:
             err = None
             try:
