@@ -386,7 +386,6 @@ def main():
         ar.sz = 18 if ar.m == 1 else 24
         info(f"fontsize {ar.sz} pt")
 
-
     z = TextStuff(ar.sz, ar.fontdir, ar.emote_sz)
     emotes = dict()
 
@@ -459,10 +458,10 @@ def main():
 
                 if (
                     ar.filter_gifts
-                    and m.get("message_type", None) == "sponsorships_gift_redemption_announcement"
+                    and m.get("message_type", None)
+                    == "sponsorships_gift_redemption_announcement"
                 ):
                     continue
-
 
                 if "emotes" in m:
                     customs = []
@@ -521,6 +520,11 @@ def main():
                     for e in m["emotes"]:
                         if e["id"] not in emotes:
                             emotes[e["id"]] = e
+                        elif (
+                            "images" not in emotes[e["id"]]
+                            or len(emotes[e["id"]]["images"]) == 0
+                        ) and ("images" in e and len(e["images"]) > 0):
+                            emotes[e["id"]] = e
 
                 # Must use a composite ID here so that legacy json can be used with new json
                 key = f"{m['timestamp']}\n{m['author']['id']}"
@@ -563,6 +567,11 @@ def main():
                         for e in m["emotes"]:
                             if e["id"] not in emotes:
                                 emotes[e["id"]] = e
+                            elif (
+                                "images" not in emotes[e["id"]]
+                                or len(emotes[e["id"]]["images"]) == 0
+                            ) and ("images" in e and len(e["images"]) > 0):
+                                emotes[e["id"]] = e
 
     if ar.emote_font and len(emotes) == 0:
         info("No emotes found")
@@ -587,7 +596,6 @@ def main():
     use_018 = "; please use softchat v0.18 or older if your chat json was created with a chat_replay_downloader from before 2021-01-29-something"
     if not jd:
         raise Exception("no messages were loaded" + use_018)
-
 
     # jd.sort(key=operator.attrgetter("timestamp"))
     jd.sort(key=lambda x: x["timestamp"])
@@ -769,7 +777,6 @@ def main():
         except Exception as ex:
             media_fn = None
             cdur_err += ": " + repr(ex)
-
 
     media_res = ar.r
     if media_res is None:
