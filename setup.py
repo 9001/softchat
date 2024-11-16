@@ -88,7 +88,7 @@ a.update(
         "keywords": "youtube chat converter danmaku marquee softsubs ass subtitles",
         "classifiers": [
             "License :: OSI Approved :: MIT License",
-            "Development Status :: 3 - Alpha",
+            "Development Status :: 5 - Production/Stable",
             "Environment :: Console",
             "Operating System :: Microsoft :: Windows",
             "Operating System :: POSIX :: Linux",
@@ -104,6 +104,7 @@ a.update(
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
+            "Programming Language :: Python :: 3.13",
         ],
         "packages": find_packages(),
         "cmdclass": {"cln": cln, "rls": rls, "tst": tst},

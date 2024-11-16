@@ -457,7 +457,7 @@ def act(cmd, url):
         "ignoreerrors": True,
     }
 
-    if "twitter.com" in url:
+    if "twitter.com" in url or "x.com" in url:
         zs = "tw-%(id)s-%(uploader_id)s - %(uploader)s.%(ext)s"
     else:
         zs = "[%(upload_date)s] [%(uploader,uploader_id|Unknown)s] %(fulltitle).100s (%(id)s).%(ext)s"
