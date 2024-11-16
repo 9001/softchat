@@ -489,8 +489,8 @@ def main():
 
                         m["message"] = txt
 
-                if at is None and "message" in m:
-                    # twitch
+                if at in (None, "text_message") and "message" in m:
+                    # twitch; vod=None, live=text_message
                     msg = m["message"]
                     at = "add_chat_item"
                     for emote in m.get("emotes", []):
